@@ -3,7 +3,7 @@
 // all the physics in model.js.
 import {
   tractivePower, fuelRate, perHundredKm, smooth, displayUnit, toCost,
-  slopeFromAltitude, smoothSlope, slopeLength, co2FromFuel, treeDays, CO2_PER_LITRE, TREE_KG_PER_YEAR,
+  slopeFromAltitude, smoothSlope, slopeLength, altitudeStep, co2FromFuel, treeDays, CO2_PER_LITRE, TREE_KG_PER_YEAR,
 } from './model.js';
 import { startGps, stopGps } from './gps.js';
 import { startUpdates, reloadIfUpdateWaiting } from './update.js';
@@ -32,6 +32,7 @@ const MAX_GAP = 5;             // s: a longer pause between samples is treated a
 const MAX_ACCEL = 6;           // m/s²: clamp on GPS-derived acceleration
 const CRUISE_SPEED = 90 / 3.6; // m/s: reference speed for the scale
 const DT_TAU = 10;             // s: smoothing of the time between GPS readings
+const SLOPE_MIN_SPEED = 3 / 3.6; // m/s: below this every altitude reading restarts the slope window
 const ALT_DISPLAY_TAU = 5;     // s: smoothing of the altitude shown (display only, the slope has its own filter)
 
 const $ = (id) => document.getElementById(id);
@@ -39,6 +40,8 @@ const screens = ['settings', 'advanced', 'setup', 'trip', 'summary'];
 function show(name) {
   for (const s of screens) $(`screen-${s}`).hidden = s !== name;
   $('version').hidden = name === 'trip'; // keep the trip screen clean
+  if (name === 'setup') ensureGps();      // warm the GPS up while the trip is being set up
+  else if (name !== 'trip') endGps();
   window.scrollTo(0, 0);
 }
 
@@ -345,6 +348,78 @@ $('start').addEventListener('click', () => startTrip({ demo: false }));
 $('demo').addEventListener('click', () => startTrip({ demo: true }));
 $('done').addEventListener('click', showSetup);
 
+// ---------- GPS: one watch for trip setup and the trip ----------
+// The watch starts when trip setup opens, so the phone has time to settle before the car moves
+// (on the first real drive the altitude stayed stale for 90 s after the start). The same watch
+// then feeds the trip without restarting. It stops on every other screen.
+// Samples received on trip setup are kept and written at the top of the trip log as 'warmup' rows.
+const WARMUP_ROWS = 600; // newest 10 minutes at 1 Hz
+let gpsOn = false;
+let warmup = [];         // [{ v, accuracy, t, alt, altAcc }] received on trip setup
+
+function ensureGps() {
+  if (gpsOn) return;
+  gpsOn = true;
+  warmup = [];
+  resetAltitude();
+  renderGpsReady(null);
+  startGps({ onSample: gpsSample, onProblem: gpsProblem });
+}
+
+function endGps() {
+  if (!gpsOn) return;
+  stopGps();
+  gpsOn = false;
+  warmup = [];
+}
+
+function gpsSample(s) {
+  if (trip) { if (!trip.demo) onSample(s); return; } // a demo drive ignores the real GPS
+  let note = 'warmup';
+  if (s.accuracy <= POOR_ACCURACY) { const a = checkAltitude(s); if (a) note += ` ${a}`; }
+  warmup.push({ ...s, note });
+  if (warmup.length > WARMUP_ROWS) warmup.shift();
+  renderGpsReady(s);
+}
+
+// ----- is the GPS altitude trusted? (altitudeStep in model.js, MODEL.md section 17) -----
+// Not trusted when the GPS starts and after every jump; trusted from the first believable change.
+// While it is not trusted there is no slope: the grade shows "–" and the fuel uses flat road.
+// The state carries over from trip setup into the trip (same GPS watch). Weak fixes are skipped.
+let altTrust = { prev: null, t: null, trusted: false };
+function resetAltitude() { altTrust = { prev: null, t: null, trusted: false }; }
+
+/** Updates the trust state with one good sample; returns a log note: 'alt_jump', 'alt_ok' or ''. */
+function checkAltitude({ v, t, alt }) {
+  const dt = altTrust.t == null ? 0 : Math.max(0, (t - altTrust.t) / 1000);
+  const kind = altitudeStep({ prevAlt: altTrust.prev, alt, step: v * dt });
+  const was = altTrust.trusted;
+  if (kind === 'jump') altTrust.trusted = false;
+  else if (kind === 'move') altTrust.trusted = true;
+  altTrust.prev = alt ?? null;
+  altTrust.t = t;
+  if (kind === 'jump') return 'alt_jump';
+  return !was && altTrust.trusted ? 'alt_ok' : '';
+}
+
+// The GPS line: setup screen and trip screen share the wording and the coloured dot.
+function gpsLine(s) {
+  const acc = `GPS ±${Math.round(s.accuracy)} m`;
+  if (s.alt == null) return { state: 'ok', text: `${acc} · no altitude` };
+  if (!altTrust.trusted) return { state: 'settle', text: `${acc} · altitude settling` };
+  return { state: 'ok', text: trip ? acc : `${acc} · altitude ${Math.round(s.alt)} m` };
+}
+
+// The GPS line on trip setup, from the latest warm-up sample (null: nothing received yet).
+function renderGpsReady(s) {
+  const el = $('gps-ready');
+  if (!s) { el.textContent = 'Waiting for GPS…'; el.dataset.state = 'wait'; return; }
+  if (s.accuracy > POOR_ACCURACY) { el.textContent = `GPS signal weak (±${Math.round(s.accuracy)} m)`; el.dataset.state = 'poor'; return; }
+  const { state, text } = gpsLine(s);
+  el.textContent = text;
+  el.dataset.state = state;
+}
+
 // ---------- trip ----------
 let trip = null;
 
@@ -409,7 +484,14 @@ function startTrip({ demo }) {
     demoTimer: null,
   };
   trip.ref = cruiseReference();
-  if (setup.log) startLog({ startMs: trip.startMs, meta: logMeta() });
+  if (setup.log) {
+    startLog({ startMs: trip.startMs, meta: logMeta() });
+    // what the GPS said while the trip was being set up: negative times, before the start
+    if (!demo) for (const s of warmup) {
+      logAdd({ t_s: (s.t - trip.startMs) / 1000, v_ms: s.v, gps_acc_m: s.accuracy, alt_m: s.alt, alt_acc_m: s.altAcc }, s.note);
+    }
+  }
+  warmup = [];
   $('trip-ac').closest('label').hidden = hasNoAc();
   $('trip-ac').closest('.controls').classList.toggle('no-ac', hasNoAc());
   $('trip-ac').checked = trip.ac;
@@ -425,21 +507,27 @@ function startTrip({ demo }) {
   $('avg-mark').hidden = true;
   $('avg-value').textContent = '–';
   $('now-mark').style.left = '0%';
-  setStatus('Waiting for GPS…');
+  if (demo) resetAltitude(); // the demo has its own altitude; a real trip keeps what trip setup learned
+  setStatus('Waiting for GPS…', 'wait');
   show('trip');
   requestWakeLock();
 
   if (demo) startDemo();
-  else startGps({ onSample, onProblem: gpsProblem });
+  else ensureGps(); // normally already running since trip setup
 }
 
-function setStatus(text) { $('status').textContent = text; }
+function setStatus(text, state = 'poor') { $('status').textContent = text; $('status').dataset.state = state; }
 
 // ----- GPS source: see gps.js -----
 function gpsProblem(kind) {
-  if (kind === 'unsupported') setStatus('This browser has no location support.');
-  else if (kind === 'denied') setStatus('Location is blocked. Allow it for this site in your browser settings, then reload.');
-  else setStatus('GPS signal lost. Waiting for it to return…');
+  let text;
+  if (kind === 'unsupported') text = 'This browser has no location support.';
+  else if (kind === 'denied') text = 'Location is blocked. Allow it for this site in your browser settings, then reload.';
+  else text = 'GPS signal lost. Waiting for it to return…';
+  if (kind !== 'lost') gpsOn = false; // the watch is dead: try again next time trip setup opens
+  if (trip) { if (!trip.demo) setStatus(text); return; }
+  $('gps-ready').textContent = text;
+  $('gps-ready').dataset.state = 'poor';
 }
 
 // ----- demo source: a looping 2-minute drive, one sample per second -----
@@ -487,7 +575,11 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
     logAdd({ t_s: (t - trip.startMs) / 1000, v_ms: v, gps_acc_m: accuracy, alt_m: alt, alt_acc_m: altAcc }, 'poor_gps');
     return;
   }
-  setStatus('');
+  const altNote = checkAltitude({ v, t, alt });
+  const line = gpsLine({ accuracy, alt });
+  setStatus(line.text, line.state);
+  const altOk = altTrust.trusted ? alt : null; // untrusted altitude: no slope
+  if (!altTrust.trusted || altNote === 'alt_jump') { resetSlopeWindow(); trip.theta = null; }
 
   const first = trip.lastT == null;
   const dt = first ? 0 : (t - trip.lastT) / 1000;
@@ -496,11 +588,11 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
   if (first || dt <= 0 || dt > MAX_GAP) {
     trip.vPrev = v;
     resetSlopeWindow();
-    updateSlope(0, alt); // start a new altitude window here
+    updateSlope(0, altOk, v); // start a new altitude window here
     if (alt != null) trip.altS = alt;
     if (!trip.hasData) { trip.vS = v; trip.fS = fuelAt(v, 0, trip.theta ?? 0); trip.hasData = true; }
     logAdd({ t_s: (t - trip.startMs) / 1000, dt_s: dt, v_ms: v, gps_acc_m: accuracy, alt_m: alt, alt_acc_m: altAcc },
-      first ? 'start' : 'gap');
+      [first ? 'start' : 'gap', altNote].filter(Boolean).join(' '));
     render();
     return;
   }
@@ -511,7 +603,7 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
   trip.vPrev = v;
 
   trip.dtS = trip.dtS == null ? dt : smooth({ prev: trip.dtS, value: dt, dt, tau: DT_TAU });
-  const rawTheta = updateSlope(v * dt, alt);
+  const rawTheta = updateSlope(v * dt, altOk, v);
   if (alt != null) trip.altS = trip.altS == null ? alt : smooth({ prev: trip.altS, value: alt, dt, tau: ALT_DISPLAY_TAU });
   const theta = trip.theta ?? 0; // no slope known yet: flat road
   const f = fuelAt(v, trip.aS, theta);
@@ -535,7 +627,7 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
       a_ms2: trip.aS, theta_raw_rad: rawTheta, theta_rad: trip.theta,
       p_inertia_W: p.inertia, p_grade_W: p.grade, p_rolling_W: p.rolling, p_drag_W: p.drag, p_ac_W: p.ac,
       p_total_W: p.total + p.ac, f_Lh: f, f_smooth_Lh: trip.fS,
-    });
+    }, altNote);
   }
   render();
 }
@@ -568,6 +660,7 @@ function logMeta() {
     average_L100km: settings.average ?? '',
     start_stop: e.startStop,
     p_max_W: e.pMax,
+    warmup_s: !trip.demo && warmup.length ? ((trip.startMs - warmup[0].t) / 1000).toFixed(0) : 0,
     user_agent: navigator.userAgent,
   };
 }
@@ -595,10 +688,13 @@ function resetSlopeWindow() {
   trip.slopeDist = 0;
 }
 
-function updateSlope(step, alt) {
+// Below SLOPE_MIN_SPEED (about stopped) each reading becomes the new anchor: a stopped car covers no
+// distance, so its altitude says nothing about the slope, and any drift during the stop must not
+// turn into a slope after moving off. The slope shown so far is kept.
+function updateSlope(step, alt, v) {
   trip.slopeDist += step;
   if (alt == null || Number.isNaN(alt)) return null; // this device gives no altitude: stay on flat road
-  if (trip.altAnchor == null) {
+  if (trip.altAnchor == null || v < SLOPE_MIN_SPEED) {
     trip.altAnchor = alt;
     trip.slopeDist = 0;
     return null;
@@ -706,7 +802,7 @@ function treeTime(days) {
 
 function endTrip() {
   if (!trip) return;
-  stopGps();
+  endGps();
   if (trip.demoTimer) clearInterval(trip.demoTimer);
   releaseWakeLock();
   const hadLog = stopLog();

@@ -38,6 +38,15 @@ body {
 h1 { margin: 0; font-size: 1.9rem; letter-spacing: -0.02em; line-height: 1.1; }
 .lede, .recap, .note { margin: 0; color: var(--dim); }
 .note { font-size: 0.9rem; text-align: center; }
+/* GPS line (trip setup and the status line of the trip screen): a coloured dot for the state,
+   green ok, amber altitude settling, red weak or lost, grey waiting */
+.gps-ready { margin: 0.75rem 0 0; text-align: center; color: var(--dim); font-variant-numeric: tabular-nums; }
+.gps-ready::before, .status::before { content: ''; display: inline-block; width: 0.6rem; height: 0.6rem; margin-right: 0.5rem; border-radius: 50%; background: var(--dim); vertical-align: 0.05rem; }
+.status:empty::before { display: none; }
+[data-state="ok"]::before { background: var(--low); }
+[data-state="settle"]::before { background: var(--mid); }
+[data-state="poor"]::before { background: var(--high); }
+.status[data-state="ok"], .status[data-state="settle"], .status[data-state="wait"] { color: var(--dim-hi); }
 small { color: var(--dim); font-size: 0.85rem; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 

@@ -394,3 +394,34 @@ export function slopeLength({ vAvg, dt, points = 4, min = 32, max = 150, fallbac
   if (!ok(vAvg) || !ok(dt) || dt === 0) return fallback;
   return Math.max(min, Math.min(max, vAvg * points * dt));
 }
+
+/**
+ * Classifies the altitude change between two consecutive GPS readings (MODEL.md section 17).
+ *
+ * Between two readings the road can rise or fall by at most `maxGrade` times the distance driven,
+ * plus `noise` metres of GPS noise and rounding. A bigger change cannot be the road: it is the
+ * GPS correcting itself (a first fix settling, or a stale altitude being replaced).
+ *
+ *   |alt − prevAlt| > maxGrade · step + noise   →  'jump'
+ *   alt === prevAlt                             →  'same'  (no news: a stale altitude repeats exactly)
+ *   otherwise                                   →  'move'  (a believable change: the altitude is alive)
+ *   either altitude missing                     →  'none'
+ *
+ * A missing, negative or NaN `step` counts as 0 m (the strictest limit).
+ *
+ * @param {object} p
+ * @param {number|null} p.prevAlt   altitude at the previous reading (m)
+ * @param {number|null} p.alt       altitude at this reading (m)
+ * @param {number} p.step           distance driven between the two readings (m)
+ * @param {number} [p.maxGrade]     steepest road accepted, as rise over distance (same as slopeFromAltitude)
+ * @param {number} [p.noise]        allowance for GPS noise and rounding (m)
+ * @returns {'jump'|'same'|'move'|'none'}
+ */
+export function altitudeStep({ prevAlt, alt, step, maxGrade = 0.25, noise = 3 }) {
+  const ok = (x) => typeof x === 'number' && !Number.isNaN(x);
+  if (!ok(prevAlt) || !ok(alt)) return 'none';
+  const dist = step > 0 ? step : 0; // also catches NaN and undefined
+  const dh = Math.abs(alt - prevAlt);
+  if (dh > maxGrade * dist + noise) return 'jump';
+  return dh === 0 ? 'same' : 'move';
+}

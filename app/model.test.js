@@ -1,7 +1,7 @@
 // Run with: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tractivePower, fuelRate, perHundredKm, smooth, displayUnit, toCost, slopeFromAltitude, smoothSlope, co2FromFuel, treeDays, slopeLength, consumptionFromCo2, idleFromDisplacement, maxPowerFromRated, dragAreaFromBody, testMass, simulateCycle, calibrateK, REAL_WORLD_FACTOR, CDA_BY_BODY, CO2_PER_LITRE, TREE_KG_PER_YEAR } from './model.js';
+import { tractivePower, fuelRate, perHundredKm, smooth, displayUnit, toCost, slopeFromAltitude, smoothSlope, co2FromFuel, treeDays, slopeLength, consumptionFromCo2, idleFromDisplacement, maxPowerFromRated, dragAreaFromBody, testMass, simulateCycle, calibrateK, altitudeStep, REAL_WORLD_FACTOR, CDA_BY_BODY, CO2_PER_LITRE, TREE_KG_PER_YEAR } from './model.js';
 
 import { WLTC3B_KMH } from './wltc.js';
 
@@ -554,4 +554,45 @@ test('calibrateK: V.7 end to end (120 g/km gasoline) lands near a sensible k', (
 test('calibrateK: null when idle alone exceeds the target, or the cycle needs no power', () => {
   assert.equal(calibrateK({ target: 1, speeds: WLTC3B_KMH, ...CAR_NO_K }), null);
   assert.equal(calibrateK({ target: 6, speeds: [0, 0, 0, 0], ...CAR_NO_K }), null);
+});
+
+// ----- altitudeStep: is an altitude change believable? (MODEL.md section 17) -----
+
+test('altitudeStep: a normal change is a move; the same value is same', () => {
+  assert.equal(altitudeStep({ prevAlt: 80, alt: 81, step: 12 }), 'move');
+  assert.equal(altitudeStep({ prevAlt: 80, alt: 78, step: 15 }), 'move'); // 2 m in one reading, as on the real 10% hills
+  assert.equal(altitudeStep({ prevAlt: 101.2, alt: 101.2, step: 12 }), 'same');
+});
+
+test('altitudeStep: the limit is 0.25 × step + 3 m, both ways', () => {
+  // 12 m driven: limit 6 m
+  assert.equal(altitudeStep({ prevAlt: 100, alt: 106, step: 12 }), 'move'); // exactly the limit is accepted
+  assert.equal(altitudeStep({ prevAlt: 100, alt: 106.01, step: 12 }), 'jump');
+  assert.equal(altitudeStep({ prevAlt: 100, alt: 94, step: 12 }), 'move');
+  assert.equal(altitudeStep({ prevAlt: 100, alt: 93.99, step: 12 }), 'jump');
+});
+
+test('altitudeStep: the two jumps of the first real drive (2026-11-25)', () => {
+  assert.equal(altitudeStep({ prevAlt: 95.5, alt: 101.2, step: 0.66 }), 'jump'); // first fix settling, parked
+  assert.equal(altitudeStep({ prevAlt: 101.2, alt: 76, step: 12.9 }), 'jump');  // stale altitude replaced
+});
+
+test('altitudeStep: when stopped only the noise allowance is left', () => {
+  assert.equal(altitudeStep({ prevAlt: 92, alt: 95, step: 0 }), 'move');
+  assert.equal(altitudeStep({ prevAlt: 92, alt: 95.5, step: 0 }), 'jump');
+});
+
+test('altitudeStep: missing altitude gives none; a bad step counts as 0 m', () => {
+  assert.equal(altitudeStep({ prevAlt: null, alt: 90, step: 10 }), 'none');
+  assert.equal(altitudeStep({ prevAlt: 90, alt: null, step: 10 }), 'none');
+  assert.equal(altitudeStep({ prevAlt: 90, alt: NaN, step: 10 }), 'none');
+  for (const step of [undefined, null, NaN, -20]) {
+    assert.equal(altitudeStep({ prevAlt: 90, alt: 94, step }), 'jump', String(step));
+    assert.equal(altitudeStep({ prevAlt: 90, alt: 92, step }), 'move', String(step));
+  }
+});
+
+test('altitudeStep: maxGrade and noise are parameters', () => {
+  assert.equal(altitudeStep({ prevAlt: 0, alt: 5, step: 10, maxGrade: 0.5 }), 'move'); // limit 8 m
+  assert.equal(altitudeStep({ prevAlt: 0, alt: 2, step: 0, noise: 1 }), 'jump');
 });

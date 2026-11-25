@@ -31,3 +31,4 @@ wrangler.jsonc
 # Logs and scratch files
 *.log
 *.tmp
+logs/
