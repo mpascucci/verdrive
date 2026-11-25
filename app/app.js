@@ -27,7 +27,10 @@ const FUELS = {
 };
 const P_MAX = 150000;          // W, clamp against GPS spikes (Tier 1 default)
 const KG_PER_PERSON = 75;      // presets include the driver; each extra person adds this
-const POOR_ACCURACY = 50;      // m: above this, freeze the reading
+// GPS accuracy bands (first drive: ±5 m reached 16 s after the first fix, then held for the whole drive)
+const GOOD_ACCURACY = 5;       // m: up to this, green: live display, altitude used for the slope
+const POOR_ACCURACY = 20;      // m: up to this, amber: display held (grey), totals go on from the speed,
+                               //    altitude not used; above it, red: display held, totals stop
 const MAX_GAP = 5;             // s: a longer pause between samples is treated as a gap
 const MAX_ACCEL = 6;           // m/s²: clamp on GPS-derived acceleration
 const CRUISE_SPEED = 90 / 3.6; // m/s: reference speed for the scale
@@ -376,7 +379,7 @@ function endGps() {
 function gpsSample(s) {
   if (trip) { if (!trip.demo) onSample(s); return; } // a demo drive ignores the real GPS
   let note = 'warmup';
-  if (s.accuracy <= POOR_ACCURACY) { const a = checkAltitude(s); if (a) note += ` ${a}`; }
+  if (s.accuracy <= GOOD_ACCURACY) { const a = checkAltitude(s); if (a) note += ` ${a}`; }
   warmup.push({ ...s, note });
   if (warmup.length > WARMUP_ROWS) warmup.shift();
   renderGpsReady(s);
@@ -404,20 +407,23 @@ function checkAltitude({ v, t, alt }) {
 
 // The GPS line: setup screen and trip screen share the wording and the coloured dot.
 function gpsLine(s) {
-  const acc = `GPS ±${Math.round(s.accuracy)} m`;
+  const acc = `GPS ±${Math.ceil(s.accuracy)} m`;
+  if (s.accuracy > POOR_ACCURACY) return { state: 'poor', text: trip ? `${acc} · weak signal, reading held` : `${acc} · weak signal` };
+  if (s.accuracy > GOOD_ACCURACY) return { state: 'fair', text: trip ? `${acc} · reading held` : `${acc} · not precise yet` };
   if (s.alt == null) return { state: 'ok', text: `${acc} · no altitude` };
   if (!altTrust.trusted) return { state: 'settle', text: `${acc} · altitude settling` };
   return { state: 'ok', text: trip ? acc : `${acc} · altitude ${Math.round(s.alt)} m` };
 }
 
 // The GPS line on trip setup, from the latest warm-up sample (null: nothing received yet).
+// Start trip is always allowed while the GPS works: with a rough fix the trip screen holds the
+// reading (grey) until the accuracy reaches GOOD_ACCURACY. Only a blocked or missing GPS disables it.
 function renderGpsReady(s) {
   const el = $('gps-ready');
-  if (!s) { el.textContent = 'Waiting for GPS…'; el.dataset.state = 'wait'; return; }
-  if (s.accuracy > POOR_ACCURACY) { el.textContent = `GPS signal weak (±${Math.round(s.accuracy)} m)`; el.dataset.state = 'poor'; return; }
-  const { state, text } = gpsLine(s);
+  const { state, text } = s ? gpsLine(s) : { state: 'wait', text: 'Waiting for GPS…' };
   el.textContent = text;
   el.dataset.state = state;
+  $('start').disabled = false;
 }
 
 // ---------- trip ----------
@@ -509,6 +515,7 @@ function startTrip({ demo }) {
   $('now-mark').style.left = '0%';
   if (demo) resetAltitude(); // the demo has its own altitude; a real trip keeps what trip setup learned
   setStatus('Waiting for GPS…', 'wait');
+  setHeld(false);
   show('trip');
   requestWakeLock();
 
@@ -528,6 +535,7 @@ function gpsProblem(kind) {
   if (trip) { if (!trip.demo) setStatus(text); return; }
   $('gps-ready').textContent = text;
   $('gps-ready').dataset.state = 'poor';
+  if (kind !== 'lost') $('start').disabled = true; // no GPS at all: no trip (the demo drive still works)
 }
 
 // ----- demo source: a looping 2-minute drive, one sample per second -----
@@ -568,17 +576,20 @@ function startDemo() {
 function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
   if (!trip || trip.paused) return;
 
+  const line = gpsLine({ accuracy, alt });
+  setStatus(line.text, line.state);
+  const held = accuracy > GOOD_ACCURACY; // amber or red: the display is held and greyed
+  setHeld(held);
+
   if (accuracy > POOR_ACCURACY) {
-    setStatus('Weak GPS signal. Reading held.');
     trip.lastT = null; // do not integrate across the bad stretch
     resetSlopeWindow();
     logAdd({ t_s: (t - trip.startMs) / 1000, v_ms: v, gps_acc_m: accuracy, alt_m: alt, alt_acc_m: altAcc }, 'poor_gps');
     return;
   }
-  const altNote = checkAltitude({ v, t, alt });
-  const line = gpsLine({ accuracy, alt });
-  setStatus(line.text, line.state);
-  const altOk = altTrust.trusted ? alt : null; // untrusted altitude: no slope
+  // amber: the speed (Doppler) is still good, so the totals go on; the altitude is not used
+  const altNote = held ? 'fair_gps' : checkAltitude({ v, t, alt });
+  const altOk = !held && altTrust.trusted ? alt : null; // untrusted altitude: no slope
   if (!altTrust.trusted || altNote === 'alt_jump') { resetSlopeWindow(); trip.theta = null; }
 
   const first = trip.lastT == null;
@@ -593,7 +604,7 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
     if (!trip.hasData) { trip.vS = v; trip.fS = fuelAt(v, 0, trip.theta ?? 0); trip.hasData = true; }
     logAdd({ t_s: (t - trip.startMs) / 1000, dt_s: dt, v_ms: v, gps_acc_m: accuracy, alt_m: alt, alt_acc_m: altAcc },
       [first ? 'start' : 'gap', altNote].filter(Boolean).join(' '));
-    render();
+    if (!held) render();
     return;
   }
 
@@ -629,8 +640,11 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
       p_total_W: p.total + p.ac, f_Lh: f, f_smooth_Lh: trip.fS,
     }, altNote);
   }
-  render();
+  if (!held) render();
 }
+
+// Held display: the figures stay at their last good values, in grey, until the GPS is good again.
+function setHeld(held) { $('screen-trip').dataset.held = held ? 'true' : ''; }
 
 function fuelAtWithoutAc(v, a, theta) {
   const saved = trip.ac;

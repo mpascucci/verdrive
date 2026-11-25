@@ -45,8 +45,12 @@ h1 { margin: 0; font-size: 1.9rem; letter-spacing: -0.02em; line-height: 1.1; }
 .status:empty::before { display: none; }
 [data-state="ok"]::before { background: var(--low); }
 [data-state="settle"]::before { background: var(--mid); }
+[data-state="fair"]::before { background: var(--mid); }
 [data-state="poor"]::before { background: var(--high); }
-.status[data-state="ok"], .status[data-state="settle"], .status[data-state="wait"] { color: var(--dim-hi); }
+.status[data-state="ok"], .status[data-state="settle"], .status[data-state="fair"], .status[data-state="wait"] { color: var(--dim-hi); }
+/* held display (GPS worse than ±5 m): the figures keep their last good values, in grey */
+.trip[data-held="true"] .value, .trip[data-held="true"] .stats span, .trip[data-held="true"] #grade-value { color: var(--dim); }
+.trip[data-held="true"] .scale { opacity: 0.4; }
 small { color: var(--dim); font-size: 0.85rem; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 
@@ -64,6 +68,7 @@ button, .chip {
 button.primary { background: var(--bone); color: var(--ink); border-color: var(--bone); font-weight: 700; }
 button.primary.big { min-height: 64px; font-size: 1.2rem; margin-top: 0.5rem; }
 button.ghost { background: transparent; }
+button:disabled { opacity: 0.35; cursor: default; }
 button.small { min-height: 44px; }
 :focus-visible { outline: 3px solid var(--mid); outline-offset: 2px; }
 
