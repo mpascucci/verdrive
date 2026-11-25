@@ -1,0 +1,219 @@
+:root {
+  --ink: #0e1311;
+  --panel: #161d1a;
+  --line: #28332e;
+  --bone: #ece8da;
+  --dim: #8c9890;
+  --dim-hi: #b2bdb5; /* brighter secondary text for the trip screen, readable in sunlight */
+  --low: #6fd6a2;
+  --mid: #f1b94b;
+  --high: #ee6a5a;
+  --radius: 14px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--bone);
+  font: 17px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.screen {
+  min-height: 100%;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+h1 { margin: 0; font-size: 1.9rem; letter-spacing: -0.02em; line-height: 1.1; }
+.lede, .recap, .note { margin: 0; color: var(--dim); }
+.note { font-size: 0.9rem; text-align: center; }
+small { color: var(--dim); font-size: 0.85rem; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+
+/* ---------- buttons ---------- */
+button, .chip {
+  font: inherit;
+  color: inherit;
+  min-height: 52px;
+  padding: 0 1.25rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+}
+button.primary { background: var(--bone); color: var(--ink); border-color: var(--bone); font-weight: 700; }
+button.primary.big { min-height: 64px; font-size: 1.2rem; margin-top: 0.5rem; }
+button.ghost { background: transparent; }
+button.small { min-height: 44px; }
+:focus-visible { outline: 3px solid var(--mid); outline-offset: 2px; }
+
+/* ---------- settings form ---------- */
+fieldset { border: 0; margin: 0 0 1.25rem; padding: 0; }
+legend { padding: 0; margin-bottom: 0.5rem; color: var(--dim); }
+.choices { display: grid; gap: 0.5rem; }
+.choices.four { grid-template-columns: 1fr 1fr; }
+.choices.three { grid-template-columns: 1fr 1fr 1fr; }
+.choices.two { grid-template-columns: 1fr 1fr; }
+.choices.auto { grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); }
+.choices label { display: block; }
+.choices input { position: absolute; opacity: 0; pointer-events: none; }
+.choices span {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 56px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--panel);
+}
+.choices.four span { flex-direction: column; gap: 0.2rem; padding: 0.6rem 0.25rem; min-height: 76px; }
+.choices svg { width: 48px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.choices label.disabled span { opacity: 0.35; }
+.choices input:checked + span { background: var(--bone); color: var(--ink); border-color: var(--bone); font-weight: 700; }
+.choices input:focus-visible + span { outline: 3px solid var(--mid); outline-offset: 2px; }
+
+.field { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem; }
+.field span { color: var(--dim); }
+.field input {
+  font: inherit; font-size: 1.5rem; color: inherit;
+  min-height: 56px; padding: 0 1rem;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+}
+#settings-form button, #advanced-form button { width: 100%; margin-top: 0.5rem; }
+
+/* ---------- trip setup ---------- */
+.rows { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.row-item { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; min-height: 68px; }
+.row-item + .row-item { border-top: 1px solid var(--line); }
+.row-item strong { display: block; font-weight: 600; }
+.stepper { display: flex; align-items: center; gap: 0.75rem; }
+.stepper button { width: 52px; padding: 0; font-size: 1.5rem; }
+.stepper output { min-width: 1.5rem; text-align: center; font-size: 1.3rem; font-variant-numeric: tabular-nums; }
+
+input[role="switch"] {
+  appearance: none; -webkit-appearance: none; flex: none;
+  width: 56px; height: 32px; border-radius: 16px; margin: 0;
+  background: var(--line); position: relative; cursor: pointer;
+  transition: background 0.15s;
+}
+input[role="switch"]::after {
+  content: ""; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--bone); transition: transform 0.15s;
+}
+input[role="switch"]:checked { background: var(--low); }
+input[role="switch"]:checked::after { transform: translateX(24px); background: var(--ink); }
+
+/* ---------- advanced settings ---------- */
+.err { color: var(--high); min-height: 0; }
+.err:empty { display: none; }
+.result { margin: 0 0 1rem; padding: 0.9rem 1rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--dim); line-height: 1.45; }
+.tier { display: table; margin: 0 0 0.4rem; padding: 0.05rem 0.5rem; border-radius: 999px; border: 1px solid var(--low); color: var(--low); font-size: 0.8rem; font-weight: 700; }
+
+.input-row { display: flex; gap: 0.6rem; }
+.input-row input { flex: 1; min-width: 0; }
+.input-row button, #settings-form .input-row button { flex: none; width: auto; margin-top: 0; }
+dialog { width: min(92vw, 26rem); padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--ink); color: var(--bone); }
+dialog::backdrop { background: rgba(0, 0, 0, 0.7); }
+dialog h2 { margin: 0 0 1rem; font-size: 1.3rem; }
+dialog button { width: 100%; margin-top: 0.6rem; }
+
+/* ---------- trip screen ---------- */
+.trip { gap: 0.5rem; justify-content: space-between; max-width: none; }
+/* a long press must not select text or open the callout menu: the Stop button needs a 0.9 s hold */
+.trip, .trip button, .chip { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.stop { touch-action: manipulation; }
+.status { margin: 0; min-height: 1.5rem; color: var(--mid); text-align: center; }
+
+.reading { text-align: center; }
+.value {
+  font-size: clamp(5.5rem, 34vw, 15rem);
+  line-height: 0.95;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  color: var(--bone);
+  transition: color 0.4s;
+}
+.value[data-band="low"] { color: var(--low); }
+.value[data-band="mid"] { color: var(--mid); }
+.value[data-band="high"] { color: var(--high); }
+.unit { margin-top: 0.25rem; font-size: 1.4rem; color: var(--dim-hi); }
+
+.scale { padding: 0 0.25rem; }
+.avg-line { margin: 0 0 0.9rem; text-align: center; color: var(--dim-hi); }
+.avg-line span { color: var(--bone); font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.track {
+  position: relative; height: 18px; border-radius: 9px;
+  /* bands: 0–40% low, 40–65% mid, 65–100% high */
+  background: linear-gradient(90deg,
+    var(--low) 0 40%, var(--mid) 40% 65%, var(--high) 65% 100%);
+  opacity: 0.9;
+}
+.mark { position: absolute; top: -8px; width: 6px; height: 34px; margin-left: -3px; border-radius: 3px; transition: left 0.5s ease-out; }
+.mark.now { background: var(--bone); box-shadow: 0 0 0 3px var(--ink); }
+.mark.avg { background: var(--ink); top: -4px; height: 26px; box-shadow: 0 0 0 2px var(--bone); }
+.tick { position: absolute; left: 50%; margin-left: -1px; top: 22px; width: 2px; height: 8px; background: var(--dim); }
+.scale-labels { display: flex; justify-content: space-between; margin-top: 1.1rem; color: var(--dim-hi); font-size: 1rem; }
+
+/* each figure: number with its unit just to the right, and a label below where needed */
+/* two columns: speed over altitude, cost over slope */
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: auto auto; grid-auto-flow: column; gap: 0.5rem 1rem; text-align: center; align-items: start; }
+.stats .pair { display: flex; align-items: baseline; justify-content: center; column-gap: 0.3rem; white-space: nowrap; }
+.stats span { font-size: clamp(1.875rem, 9.4vw, 3rem); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.stats .label { display: block; font-size: 1.05rem; color: var(--dim-hi); }
+/* slope colour: uphill (positive) red, it costs more fuel; downhill (negative) green; flat neutral */
+#grade-value[data-dir="up"] { color: var(--high); }
+#grade-value[data-dir="down"] { color: var(--low); }
+
+
+.controls { display: grid; grid-template-columns: auto 1fr 1.4fr; gap: 0.6rem; }
+.controls.no-ac { grid-template-columns: 1fr 1.4fr; } /* no A/C switch: Pause and Stop share the row */
+.chip { display: flex; align-items: center; justify-content: center; min-height: 64px; font-size: 1.05rem; }
+.switch-chip { gap: 0.6rem; }
+.stop { position: relative; overflow: hidden; border-color: var(--high); color: var(--bone); }
+.stop i { position: absolute; inset: 0; background: var(--high); transform: scaleX(0); transform-origin: left; opacity: 0.55; }
+.stop.holding i { transform: scaleX(1); transition: transform 0.9s linear; }
+.stop span { position: relative; }
+
+/* landscape: figure and stats on the left, scale and controls on the right */
+@media (orientation: landscape) and (max-height: 520px) {
+  .trip { display: grid; grid-template-columns: 1.3fr 1fr; grid-template-rows: auto 1fr auto; gap: 0.5rem 1.5rem; align-content: center; }
+  .status { grid-column: 1 / -1; min-height: 1.2rem; }
+  /* left column: the big figure with speed, trip cost and slope under it */
+  .reading { grid-column: 1; grid-row: 2; align-self: center; }
+  .value { font-size: clamp(5rem, 30vh, 11rem); }
+  .stats { grid-column: 1; grid-row: 3; gap: 0.4rem; }
+  .stats span { font-size: clamp(1.375rem, 6.9vh, 2rem); }
+  .stats small { font-size: 0.72rem; }
+  .stats .label { font-size: 0.9rem; }
+  /* right column: the scale, then the controls */
+  .scale { grid-column: 2; grid-row: 2; align-self: center; }
+  .controls { grid-column: 2; grid-row: 3; grid-template-columns: auto 1fr 1.5fr; }
+  /* small phones: a compact A/C chip (switch over its label) leaves room for Pause and Stop */
+  .chip { padding: 0 0.5rem; }
+  .switch-chip { flex-direction: column; gap: 0.35rem; }
+}
+
+/* ---------- summary ---------- */
+.summary .tappable { cursor: pointer; }
+.summary .tappable:focus-visible { outline: 3px solid var(--mid); outline-offset: 2px; }
+.tree-detail { margin: 1rem 0; padding: 0.9rem 1rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--dim); line-height: 1.45; }
+.summary { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.summary div { border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 0.9rem 1rem; }
+.summary dt { color: var(--dim); font-size: 0.9rem; }
+.summary dd { margin: 0.15rem 0 0; font-size: 1.7rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+/* ---------- version label ---------- */
+.version { padding: 0 1rem 1.25rem; text-align: center; color: var(--dim); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.version:empty { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

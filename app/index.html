@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0E1311">
+  <title>VerDrive</title>
+  <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="VerDrive">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- 1. Car settings (first run, and reachable from trip setup) -->
+  <main id="screen-settings" class="screen" hidden>
+    <h1>Your vehicle</h1>
+    <p class="lede">Three answers give a rough estimate. You can refine it later.</p>
+
+    <form id="settings-form">
+      <fieldset>
+        <legend>Vehicle type</legend>
+        <div class="choices four">
+          <label><input type="radio" name="vehicle" value="city" required><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M7 17V8L9 6H24.5L29 11L41 12.5V17M7 17h4M17 17h14M37 17h4"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg>City car</span></label>
+          <label><input type="radio" name="vehicle" value="sedan"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M4 17V13L12 11.5L17 7H27L33 11.5L44 13V17M4 17h7M17 17h14M37 17h7"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg>Sedan</span></label>
+          <label><input type="radio" name="vehicle" value="suv"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M4 17V8L8 5H28L36 10.5L44 12V17M4 17h7M17 17h14M37 17h7"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg>SUV</span></label>
+          <label><input type="radio" name="vehicle" value="van"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M4 17V5H30L44 12V17M30 5V12H44M4 17h7M17 17h14M37 17h7"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg>Van</span></label>
+          <label><input type="radio" name="vehicle" value="scooter"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M36 17L32.5 6M30 5H35M32.2 7C31.5 11.5 30 14 26.5 15H19M19 15C16 15 14.5 13.5 14 11.5C13.7 10 14.5 9 16 9H25M12 17L14 11.5"/><circle cx="12" cy="17" r="3.5"/><circle cx="36" cy="17" r="3.5"/></svg>Scooter</span></label>
+          <label><input type="radio" name="vehicle" value="moto"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M10 17L18 9H28L32 12L36 17M18 9L22 6H25M28 9L34 6H38M17 13H27"/><circle cx="10" cy="17" r="4"/><circle cx="36" cy="17" r="4"/></svg>Motorcycle</span></label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Fuel</legend>
+        <div class="choices three">
+          <label><input type="radio" name="fuel" value="gasoline" required><span>Gasoline</span></label>
+          <label><input type="radio" name="fuel" value="diesel"><span>Diesel</span></label>
+          <label><input type="radio" name="fuel" value="lpg"><span>LPG (GPL)</span></label>
+        </div>
+      </fieldset>
+
+      <label class="field">
+        <span>Fuel price (€ per litre)</span>
+        <input id="price" name="price" type="number" inputmode="decimal" min="0.1" max="10" step="0.001" required>
+      </label>
+
+      <div class="field" id="average-field">
+        <label for="average"><span>Your average consumption (L/100 km), optional</span></label>
+        <div class="input-row">
+          <input id="average" name="average" type="number" inputmode="decimal" min="1" max="40" step="any">
+          <button type="button" id="calc-open" class="ghost">Calc</button>
+        </div>
+        <small>If you know your real average (from a fill-up, the dashboard or past rides), enter it and the app adjusts to it. Calc works it out from fuel and distance.</small>
+        <small class="err" id="average-err"></small>
+      </div>
+
+      <button type="submit" class="primary">Save</button>
+      <button type="button" id="open-advanced" class="ghost">Advanced settings (registration certificate)</button>
+      <button type="button" id="settings-cancel" class="ghost" hidden>Cancel</button>
+    </form>
+  </main>
+
+  <!-- 1b. Advanced settings (Tier 2): fields from the registration certificate -->
+  <main id="screen-advanced" class="screen" hidden>
+    <h1>Advanced settings</h1>
+    <p class="lede" data-cars>Copy these fields from your registration certificate (cars and vans, petrol, diesel or LPG; not hybrids or electric cars). They replace the rough presets and tune the fuel model to your car.</p>
+    <p class="lede" data-moto hidden>Copy these fields from your registration certificate. The rider (75 kg) is added automatically. The fuel use itself is tuned by your average consumption (Calc button in the car settings).</p>
+
+    <form id="advanced-form" novalidate>
+      <label class="field">
+        <span>G: mass in running order (kg), optional</span>
+        <input name="g" type="number" inputmode="decimal" min="40" max="4000" step="any">
+        <small>Used only if G.1 is blank. If both are blank, the typical mass of your vehicle type is used.</small>
+        <small class="err" data-for="g"></small>
+      </label>
+      <label class="field">
+        <span>G.1: empty mass (kg), optional</span>
+        <input name="g1" type="number" inputmode="decimal" min="40" max="3925" step="any">
+        <small>G.1 is G without the driver. It is used first; G is the fallback.</small>
+        <small class="err" data-for="g1"></small>
+      </label>
+      <label class="field">
+        <span id="f-label">F.1: maximum laden mass (kg), optional</span>
+        <input name="maxLaden" type="number" inputmode="decimal" min="100" max="8000" step="any">
+        <small id="f-hint">If there is no F.1, use F.2.</small>
+        <small class="err" data-for="maxLaden"></small>
+      </label>
+      <label class="field" data-cars>
+        <span>P.1: engine capacity (cm³)</span>
+        <input name="displacement" type="number" inputmode="decimal" min="400" max="8500" step="1">
+        <small class="err" data-for="displacement"></small>
+      </label>
+      <label class="field">
+        <span>P.2: maximum power (kW)</span>
+        <input name="ratedKw" type="number" inputmode="decimal" min="5" max="800" step="0.1">
+        <small class="err" data-for="ratedKw"></small>
+      </label>
+      <label class="field" data-cars>
+        <span>V.7: CO₂ emissions (g/km)</span>
+        <input name="co2" type="number" inputmode="decimal" min="20" max="600" step="0.1">
+        <small>Tunes the fuel use of your car. Leave blank if the certificate has no WLTP value.</small>
+        <small class="err" data-for="co2"></small>
+      </label>
+
+      <fieldset data-cars>
+        <legend>Body type</legend>
+        <div class="choices three">
+          <label><input type="radio" name="body" value="hatchback"><span>Hatchback</span></label>
+          <label><input type="radio" name="body" value="sedan"><span>Sedan</span></label>
+          <label><input type="radio" name="body" value="estate"><span>Estate</span></label>
+          <label><input type="radio" name="body" value="suv"><span>SUV</span></label>
+          <label><input type="radio" name="body" value="van"><span>Van</span></label>
+        </div>
+        <small class="err" data-for="body"></small>
+      </fieldset>
+
+      <div class="rows" data-cars style="margin-bottom:1.25rem">
+        <label class="row-item switch">
+          <div><strong>Start-stop</strong><small>The engine switches off when the car stops.</small></div>
+          <input type="checkbox" name="startStop" role="switch">
+        </label>
+      </div>
+
+      <p id="advanced-result" class="result" hidden></p>
+
+      <button type="submit" class="primary">Save advanced settings</button>
+      <button type="button" id="advanced-remove" class="ghost" hidden>Go back to quick settings</button>
+      <button type="button" id="advanced-cancel" class="ghost">Cancel</button>
+    </form>
+  </main>
+
+  <!-- Calculator for the average consumption: litres used and kilometres covered -->
+  <dialog id="calc-dialog">
+    <form id="calc-form" novalidate>
+      <h2>Average consumption</h2>
+      <label class="field">
+        <span>Fuel used (litres)</span>
+        <input id="calc-litres" type="number" inputmode="decimal" min="0" step="any">
+      </label>
+      <label class="field">
+        <span>Distance covered (km)</span>
+        <input id="calc-km" type="number" inputmode="decimal" min="0" step="any">
+      </label>
+      <p id="calc-result" class="result" role="status">Enter both values.</p>
+      <button type="submit" id="calc-use" class="primary" disabled>Use this value</button>
+      <button type="button" id="calc-cancel" class="ghost">Cancel</button>
+    </form>
+  </dialog>
+
+  <!-- 2. Trip setup (every start) -->
+  <main id="screen-setup" class="screen" hidden>
+    <header class="row">
+      <h1>New trip</h1>
+      <button type="button" id="open-settings" class="ghost small">Settings</button>
+    </header>
+    <p id="recap" class="recap"></p>
+    <div id="vehicle-switch" class="choices auto" role="radiogroup" aria-label="Vehicle" hidden></div>
+
+    <div class="rows">
+      <div class="row-item">
+        <div>
+          <strong id="pax-label">People in the car</strong>
+          <small>Each extra person adds 75 kg.</small>
+        </div>
+        <div class="stepper">
+          <button type="button" id="pax-minus" aria-label="Fewer people">−</button>
+          <output id="pax" aria-live="polite">1</output>
+          <button type="button" id="pax-plus" aria-label="More people">+</button>
+        </div>
+      </div>
+
+      <label class="row-item switch">
+        <div><strong>Air conditioning</strong><small>Adds its load to the engine.</small></div>
+        <input type="checkbox" id="setup-ac" role="switch">
+      </label>
+
+      <label class="row-item switch" hidden>
+        <div><strong>Cold start</strong><small>Engine not yet warm. Recorded now, applied in a later version.</small></div>
+        <input type="checkbox" id="setup-cold" role="switch" checked>
+      </label>
+
+      <label class="row-item switch">
+        <div><strong>Record log</strong><small>Saves speed, altitude and power figures on this phone, never your position. Export it after the trip.</small></div>
+        <input type="checkbox" id="setup-log" role="switch" checked>
+      </label>
+    </div>
+
+    <button type="button" id="start" class="primary big">Start trip</button>
+    <p class="note">Your browser will ask to use your location.</p>
+    <button type="button" id="demo" class="ghost">Try a demo drive</button>
+    <button type="button" id="export-last" class="ghost" hidden>Export last log</button>
+  </main>
+
+  <!-- 3. Trip -->
+  <main id="screen-trip" class="screen trip" hidden>
+    <p id="status" class="status" role="status"></p>
+
+    <section class="reading" aria-live="off">
+      <div id="value" class="value" data-band="none">—</div>
+      <div id="unit" class="unit">€/100 km</div>
+    </section>
+
+    <section class="scale">
+      <p class="avg-line"><span id="avg-value">–</span> €/100 km trip average</p>
+      <div class="track" aria-hidden="true">
+        <i id="avg-mark" class="mark avg" hidden></i>
+        <i id="now-mark" class="mark now"></i>
+        <span class="tick" id="cruise-tick"></span>
+      </div>
+      <div class="scale-labels" aria-hidden="true">
+        <span>Low</span>
+        <span id="cruise-label">Typical cruise</span>
+        <span>High</span>
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat"><div class="pair"><span id="speed">0</span><small>km/h</small></div></div>
+      <div class="stat">
+        <div class="pair"><span id="altitude">–</span><small>m</small></div>
+        <small class="label">altitude</small>
+      </div>
+      <div class="stat">
+        <div class="pair"><span id="trip-cost">0.00</span><small>€</small></div>
+        <small class="label">so far</small>
+      </div>
+      <div class="stat">
+        <div class="pair"><span id="grade-value">–</span></div>
+        <small class="label">slope</small>
+      </div>
+    </section>
+
+    <section class="controls">
+      <label class="chip switch-chip">
+        <input type="checkbox" id="trip-ac" role="switch">
+        <span>A/C</span>
+      </label>
+      <button type="button" id="pause" class="chip">Pause</button>
+      <button type="button" id="stop" class="chip stop"><i></i><span>Hold to stop</span></button>
+    </section>
+  </main>
+
+  <!-- 4. Summary -->
+  <main id="screen-summary" class="screen" hidden>
+    <h1>Trip summary</h1>
+    <dl id="summary" class="summary"></dl>
+    <p id="tree-detail" class="tree-detail" hidden></p>
+    <button type="button" id="export-log" class="ghost" hidden>Export log</button>
+    <button type="button" id="done" class="primary big">New trip</button>
+  </main>
+
+  <footer id="version" class="version"></footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

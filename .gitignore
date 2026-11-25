@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+
+# Wrangler (Cloudflare): local cache and state, and local secrets
+.wrangler/
+.dev.vars
+.dev.vars.*
+
+# Environment files
+.env
+.env.*
+
+# Dependencies (none today; the app has no build step)
+node_modules/
+
+# Trip logs exported from the app: personal driving data (speed, altitude, times), kept out of the repository
+logs/
+
+# Editors and local tool settings
+.idea/
+.vscode/
+.claude/settings.local.json
+
+# Plans and Claude files
+.claude/
+plans/
+
+# test deploy
+wrangler.jsonc
+
+# Logs and scratch files
+*.log
+*.tmp
