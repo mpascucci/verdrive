@@ -1,7 +1,7 @@
 // Run with: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkAdvanced, COHERENCE_TOLERANCE, checkAverage, averageFromFuel, kFromAverage, buildAdvanced, buildAdvancedMoto, checkMoto, simulatedWltp, PASSENGER_MASS } from './profile.js';
+import { checkAdvanced, COHERENCE_TOLERANCE, checkAverage, averageFromFuel, kFromAverage, buildAdvanced, buildAdvancedMoto, checkMoto, simulatedWltp, PASSENGER_MASS, LPG_PER_GASOLINE } from './profile.js';
 import { consumptionFromCo2, simulateCycle, REAL_WORLD_FACTOR } from './model.js';
 import { WLTC3B_KMH } from './wltc.js';
 
@@ -41,6 +41,18 @@ test('buildAdvanced: simulating the WLTP with the stored k gives V.7 × 1.15', (
   const { profile } = buildAdvanced({ raw: RAW, fuel: 'gasoline', tier1K: 0.45 });
   const target = consumptionFromCo2({ co2: 120, fuel: 'gasoline' }) * REAL_WORLD_FACTOR;
   assert.ok(Math.abs(simulatedWltp(profile) - target) < 1e-6);
+});
+
+test('buildAdvanced: LPG reads V.7 as gasoline, then × LPG_PER_GASOLINE (not the LPG CO₂ factor)', () => {
+  const gas = buildAdvanced({ raw: RAW, fuel: 'gasoline', tier1K: 0.45 }).profile;
+  const lpg = buildAdvanced({ raw: RAW, fuel: 'lpg', tier1K: 0.54 }).profile;
+  assert.equal(lpg.kSource, 'v7');
+  assert.ok(Math.abs(lpg.official - gas.official * LPG_PER_GASOLINE) < 1e-9);
+  assert.ok(Math.abs(simulatedWltp(lpg) - lpg.official * REAL_WORLD_FACTOR) < 1e-6);
+  // f0 is the same for both fuels, so k grows a little more than the litre ratio
+  assert.ok(lpg.k / gas.k > LPG_PER_GASOLINE && lpg.k / gas.k < 1.3, String(lpg.k / gas.k));
+  // an own average is still used as it is
+  assert.equal(buildAdvanced({ raw: RAW, fuel: 'lpg', tier1K: 0.54, average: 8 }).profile.official, 8);
 });
 
 test('buildAdvanced: the average wins over V.7 and gets no 1.15 factor; V.7 alone does', () => {

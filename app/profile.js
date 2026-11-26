@@ -6,6 +6,13 @@ import {
 } from './model.js';
 import { WLTC3B_KMH } from './wltc.js';
 
+/**
+ * Litres of LPG burned per litre of gasoline for the same work: ~1.2 (energy ratio about 32 / 26 MJ/L,
+ * real-world +15–25%). Same ratio as the Quick values in app.js (k 0.54 / 0.45). Used to turn the V.7
+ * figure, read as gasoline, into LPG litres.
+ */
+export const LPG_PER_GASOLINE = 1.2;
+
 /** Accepted range [min, max] and unit for each typed field. Outside it the value is almost surely a typo. */
 export const FIELD_LIMITS = {
   g:            { min: 500, max: 4000, unit: 'kg',    name: 'G (mass in running order)' },
@@ -238,7 +245,11 @@ export function buildAdvanced({ raw, fuel, tier1K, average = null, presetMass = 
   let target = null;
   if (average !== null) { official = average; target = average; kSource = 'average'; }
   else if (values.co2 !== null) {
-    official = consumptionFromCo2({ co2: values.co2, fuel });
+    // A bi-fuel LPG car has one V.7 and we cannot tell which fuel it was measured on: read it as the
+    // gasoline figure, then convert to LPG litres (decision 2026-11-26, see LPG_PER_GASOLINE).
+    official = fuel === 'lpg'
+      ? consumptionFromCo2({ co2: values.co2, fuel: 'gasoline' }) * LPG_PER_GASOLINE
+      : consumptionFromCo2({ co2: values.co2, fuel });
     target = official * REAL_WORLD_FACTOR;
     kSource = 'v7';
   }

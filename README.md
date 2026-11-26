@@ -4,7 +4,7 @@ A phone app that shows what your trip costs **right now**, in €/100 km while y
 
 It is a Progressive Web App: plain JavaScript, no framework, no build step, no server. It works offline once installed, keeps the screen on during a trip, and stores everything on the phone.
 
-**Status:** early. The model and the screens work and are tested (`node --test`), but the slope handling has not been checked on a real drive yet. Estimates are rough: about ±20–30% with the quick settings, better with the advanced ones.
+**Status:** early. The model and the screens work and are tested (`node --test`), and the slope handling works on real drives in town and on the freeway. Estimates are rough: about ±20–30% with the quick settings, better with the advanced ones.
 
 ## What it does
 

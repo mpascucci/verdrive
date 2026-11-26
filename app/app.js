@@ -398,7 +398,9 @@ function checkAltitude({ v, t, alt }) {
   const kind = altitudeStep({ prevAlt: altTrust.prev, alt, step: v * dt });
   const was = altTrust.trusted;
   if (kind === 'jump') altTrust.trusted = false;
-  else if (kind === 'move') altTrust.trusted = true;
+  // A change while parked does not earn trust: on the 2026-11-25 city drive a stale altitude moved 1.1 m
+  // while stopped, was trusted, then stayed frozen for 70 s of driving. A jump still withdraws trust.
+  else if (kind === 'move' && v >= SLOPE_MIN_SPEED) altTrust.trusted = true;
   altTrust.prev = alt ?? null;
   altTrust.t = t;
   if (kind === 'jump') return 'alt_jump';
