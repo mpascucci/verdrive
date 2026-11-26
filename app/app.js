@@ -2,7 +2,7 @@
 // trip log in triplog.js, updates in update.js,
 // all the physics in model.js.
 import {
-  tractivePower, fuelRate, perHundredKm, smooth, displayUnit, toCost,
+  tractivePower, fuelRate, smooth, toCost,
   slopeFromAltitude, smoothSlope, slopeLength, altitudeStep, co2FromFuel, treeDays, CO2_PER_LITRE, TREE_KG_PER_YEAR,
 } from './model.js';
 import { startGps, stopGps } from './gps.js';
@@ -456,11 +456,7 @@ function fuelAt(v, a, theta = 0) {
 
 // Cost at steady cruise: the reference the scale and colour bands are relative to.
 function cruiseReference() {
-  const f = fuelAt(CRUISE_SPEED, 0);
-  return {
-    per100km: toCost({ litres: perHundredKm({ f, v: CRUISE_SPEED }), price: settings.price }),
-    perHour: toCost({ litres: f, price: settings.price }),
-  };
+  return toCost({ litres: fuelAt(CRUISE_SPEED, 0), price: settings.price });
 }
 
 function startTrip({ demo }) {
@@ -482,13 +478,12 @@ function startTrip({ demo }) {
     theta: null,      // smoothed road angle (rad); null = no slope known yet
     altAnchor: null,  // altitude at the last accepted slope update (m)
     slopeDist: 0,     // distance travelled since that update (m)
-    unit: 'perHour',
     distance: 0,      // m
     seconds: 0,       // s of moving-or-stopped time, pauses excluded
     litres: 0,
     acLitres: 0,      // fuel attributable to A/C (estimated)
     idleLitres: 0,    // fuel burned while stopped
-    ref: null,
+    ref: null,        // cost at steady cruise (€/h)
     demoTimer: null,
   };
   trip.ref = cruiseReference();
@@ -739,18 +734,12 @@ function renderGrade() {
 // ----- display -----
 function render() {
   const price = settings.price;
-  trip.unit = displayUnit({ v: trip.vS, previous: trip.unit });
-  const per100 = trip.unit === 'per100km';
-
-  const cost = per100
-    ? toCost({ litres: perHundredKm({ f: trip.fS, v: trip.vS }) ?? 0, price })
-    : toCost({ litres: trip.fS, price });
-  const ref = per100 ? trip.ref.per100km : trip.ref.perHour;
+  const cost = toCost({ litres: trip.fS, price }); // €/h
+  const ref = trip.ref;
   const ratio = cost / ref;
 
-  $('value').textContent = cost.toFixed(per100 ? 1 : 2);
+  $('value').textContent = cost.toFixed(2);
   $('value').dataset.band = ratio < 0.8 ? 'low' : ratio < 1.3 ? 'mid' : 'high';
-  $('unit').textContent = per100 ? '€/100 km' : '€/h';
   $('speed').textContent = Math.round(trip.vS * 3.6);
   $('trip-cost').textContent = toCost({ litres: trip.litres, price }).toFixed(2);
   renderGrade();
@@ -758,16 +747,11 @@ function render() {
 
   // scale runs 0 to 2x the cruising cost, so the cruise tick sits at 50%
   $('now-mark').style.left = `${Math.min(1, ratio / 2) * 100}%`;
-  $('cruise-label').textContent = `Typical cruise ${ref.toFixed(per100 ? 1 : 2)}`;
+  $('cruise-label').textContent = `Typical cruise ${ref.toFixed(2)}`;
 
-  // trip average marker, in the unit currently shown
-  // average cost per 100 km over the whole trip, shown above the bar (needs 300 m to mean anything)
-  const avg100 = trip.distance > 300 ? toCost({ litres: trip.litres, price }) / (trip.distance / 100000) : null;
-  $('avg-value').textContent = avg100 == null ? '–' : avg100.toFixed(1);
-
-  let avg = null;
-  if (per100) avg = avg100;
-  if (!per100 && trip.seconds > 30) avg = toCost({ litres: trip.litres, price }) / (trip.seconds / 3600);
+  // trip average (€/h over the trip time, pauses excluded): above the bar and as a marker (needs 30 s)
+  const avg = trip.seconds > 30 ? toCost({ litres: trip.litres, price }) / (trip.seconds / 3600) : null;
+  $('avg-value').textContent = avg == null ? '–' : avg.toFixed(2);
   $('avg-mark').hidden = avg == null;
   if (avg != null) $('avg-mark').style.left = `${Math.min(1, avg / ref / 2) * 100}%`;
 }
@@ -832,7 +816,7 @@ function endTrip() {
     ['Time', `${mins} min`],
     ['Fuel', `${trip.litres.toFixed(2)} L`],
     ['Total cost', `€${total.toFixed(2)}`],
-    ['Average', km > 0.1 ? `€${(total / km * 100).toFixed(1)}/100 km` : '—'],
+    ['Average', trip.seconds > 30 ? `€${(total / (trip.seconds / 3600)).toFixed(2)}/h` : '—'],
     ['Idling', `€${toCost({ litres: trip.idleLitres, price }).toFixed(2)}`],
   ];
   const co2 = co2FromFuel({ litres: trip.litres, fuel: settings.fuel });

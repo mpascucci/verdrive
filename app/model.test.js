@@ -1,7 +1,7 @@
 // Run with: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tractivePower, fuelRate, perHundredKm, smooth, displayUnit, toCost, slopeFromAltitude, smoothSlope, co2FromFuel, treeDays, slopeLength, consumptionFromCo2, idleFromDisplacement, maxPowerFromRated, dragAreaFromBody, testMass, simulateCycle, calibrateK, altitudeStep, REAL_WORLD_FACTOR, CDA_BY_BODY, CO2_PER_LITRE, TREE_KG_PER_YEAR } from './model.js';
+import { tractivePower, fuelRate, perHundredKm, smooth, toCost, slopeFromAltitude, smoothSlope, co2FromFuel, treeDays, slopeLength, consumptionFromCo2, idleFromDisplacement, maxPowerFromRated, dragAreaFromBody, testMass, simulateCycle, calibrateK, altitudeStep, REAL_WORLD_FACTOR, CDA_BY_BODY, CO2_PER_LITRE, TREE_KG_PER_YEAR } from './model.js';
 
 import { WLTC3B_KMH } from './wltc.js';
 
@@ -157,7 +157,7 @@ test('fuelRate: never negative', () => {
   }
 });
 
-// ---- display: perHundredKm, smooth, displayUnit, toCost ----
+// ---- display: perHundredKm, smooth, toCost ----
 
 test('perHundredKm: SUV at 100 km/h, 8.65 L/h gives 8.65 L/100 km', () => {
   const r = perHundredKm({ f: 8.65, v: kmh(100) });
@@ -188,16 +188,6 @@ test('smooth: a larger dt moves further toward the input', () => {
 test('smooth: after dt = tau, covers 1 − 1/e of the gap', () => {
   const s = smooth({ prev: 0, value: 10, dt: 2, tau: 2 });
   assert.ok(Math.abs(s - 10 * (1 - Math.exp(-1))) < 1e-9);
-});
-
-test('displayUnit: switches up above 12 km/h and down below 8 km/h', () => {
-  assert.equal(displayUnit({ v: kmh(13), previous: 'perHour' }), 'per100km');
-  assert.equal(displayUnit({ v: kmh(7), previous: 'per100km' }), 'perHour');
-});
-
-test('displayUnit: holds the previous unit inside the 8–12 km/h band', () => {
-  assert.equal(displayUnit({ v: kmh(10), previous: 'perHour' }), 'perHour');
-  assert.equal(displayUnit({ v: kmh(10), previous: 'per100km' }), 'per100km');
 });
 
 test('toCost: litres × price, also for L/h → €/h', () => {

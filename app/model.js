@@ -117,25 +117,6 @@ export function smooth({ prev, value, dt, tau = 2 }) {
   return prev + alpha * (value - prev);
 }
 
-// Unit switch thresholds (m/s), with hysteresis around 10 km/h.
-export const UNIT_UP_SPEED = 12 / 3.6;
-export const UNIT_DOWN_SPEED = 8 / 3.6;
-
-/**
- * Which unit to display: 'perHour' (L/h) when slow, 'per100km' when faster.
- * Switches up above ~12 km/h and down below ~8 km/h; in between keeps `previous`.
- *
- * @param {object} p
- * @param {number} p.v  speed (m/s)
- * @param {'perHour'|'per100km'} [p.previous] unit currently shown
- * @returns {'perHour'|'per100km'}
- */
-export function displayUnit({ v, previous = 'perHour' }) {
-  if (v >= UNIT_UP_SPEED) return 'per100km';
-  if (v <= UNIT_DOWN_SPEED) return 'perHour';
-  return previous;
-}
-
 /**
  * Cost from a quantity of fuel and a price per litre.
  * Works for litres (→ €) and L/h (→ €/h) alike.
