@@ -32,3 +32,6 @@ wrangler.jsonc
 *.log
 *.tmp
 logs/
+
+# Local developer tools (log replay page): kept on this computer only
+tools/

@@ -5,11 +5,18 @@ import {
   tractivePower, fuelRate, smooth, toCost,
   slopeFromAltitude, smoothSlope, slopeLength, altitudeStep, co2FromFuel, treeDays, CO2_PER_LITRE, TREE_KG_PER_YEAR,
 } from './model.js';
-import { startGps, stopGps } from './gps.js';
+import { startGps, stopGps, signalBars } from './gps.js';
+import { binProfile, extremes } from './elevation.js';
 import { startUpdates, reloadIfUpdateWaiting } from './update.js';
 import { buildAdvanced, buildAdvancedMoto, simulatedWltp, checkAverage, kFromAverage, averageFromFuel } from './profile.js';
 import { normalizeStore, settingsFor, activeSettings, saveVehicle, setActive, recentVehicles } from './vehicles.js';
-import { startLog, stopLog, logAdd, logActive, hasSavedLogs, exportLatestLog } from './triplog.js';
+import { startLog, stopLog, logAdd, logActive, hasSavedLogs, exportLatestLog, parseLog } from './triplog.js';
+import { t, nf, loadLang, saveLang, getLang, applyStatic } from './i18n.js';
+import { segmentPaths } from './segments.js';
+
+loadLang();
+const vehicleLabel = (id) => t(`veh.${id}`);
+const fuelLabel = (id) => t(`fuel.${id}`);
 
 // ---------- Tier 1 presets (gasoline), from ROADMAP.md ----------
 const PRESETS = {
@@ -34,6 +41,7 @@ const POOR_ACCURACY = 20;      // m: up to this, amber: display held (grey), tot
 const MAX_GAP = 5;             // s: a longer pause between samples is treated as a gap
 const MAX_ACCEL = 6;           // m/s²: clamp on GPS-derived acceleration
 const CRUISE_SPEED = 90 / 3.6; // m/s: reference speed for the scale
+const RECENT_WINDOW = 300;     // s of trip time for the "last 5 min" average under the bar
 const DT_TAU = 10;             // s: smoothing of the time between GPS readings
 const SLOPE_MIN_SPEED = 3 / 3.6; // m/s: below this every altitude reading restarts the slope window
 const ALT_DISPLAY_TAU = 5;     // s: smoothing of the altitude shown (display only, the slope has its own filter)
@@ -42,7 +50,6 @@ const $ = (id) => document.getElementById(id);
 const screens = ['settings', 'advanced', 'setup', 'trip', 'summary'];
 function show(name) {
   for (const s of screens) $(`screen-${s}`).hidden = s !== name;
-  $('version').hidden = name === 'trip'; // keep the trip screen clean
   if (name === 'setup') ensureGps();      // warm the GPS up while the trip is being set up
   else if (name !== 'trip') endGps();
   window.scrollTo(0, 0);
@@ -68,6 +75,22 @@ function persistStore() {
 function saveSettings(s) {
   store = saveVehicle(store, s);
   persistStore();
+  rememberPrice(s.fuel, s.price);
+}
+
+// Last price paid for each fuel, whatever the vehicle (a pump price): picking a fuel brings its price back.
+const PRICES_KEY = 'fuelprice.fuelPrices';
+function lastPrices() {
+  try { const p = JSON.parse(localStorage.getItem(PRICES_KEY)); return p && typeof p === 'object' ? p : {}; }
+  catch { return {}; }
+}
+function lastPrice(fuel) {
+  const p = Number(lastPrices()[fuel]);
+  return p >= 0.1 && p <= 10 ? p : null;
+}
+function rememberPrice(fuel, price) {
+  if (!(fuel in FUELS) || !(price >= 0.1 && price <= 10)) return;
+  try { localStorage.setItem(PRICES_KEY, JSON.stringify({ ...lastPrices(), [fuel]: price })); } catch { /* not remembered */ }
 }
 
 let settings = activeSettings(store);
@@ -104,18 +127,15 @@ function refreshAdvanced() {
   }
 }
 refreshAdvanced();
-const setup = { passengers: 1, ac: false, cold: true, log: true };
+const setup = { passengers: 1, cold: true };
 
 // ---------- settings screen ----------
 const form = $('settings-form');
 // Motorcycles and scooters have no diesel or LPG option: disable them and fall back to gasoline.
 function syncFuelChoices() {
   const gasOnly = Boolean(PRESETS[form.vehicle.value]?.gasolineOnly);
-  for (const id of ['diesel', 'lpg']) {
-    const input = form.querySelector(`input[name="fuel"][value="${id}"]`);
-    input.disabled = gasOnly;
-    input.closest('label').classList.toggle('disabled', gasOnly);
-  }
+  for (const id of ['diesel', 'lpg']) form.fuel.querySelector(`option[value="${id}"]`).disabled = gasOnly;
+  form.fuel.disabled = gasOnly;
   if (gasOnly) form.fuel.value = 'gasoline';
   // The first run asks for the three basic answers only; the optional average appears from the second visit.
   $('average-field').hidden = !settings;
@@ -124,17 +144,61 @@ function syncFuelChoices() {
 // (likely the same) and starts without an average, which belongs to one vehicle.
 form.querySelectorAll('input[name="vehicle"]').forEach((r) => r.addEventListener('change', () => {
   const saved = settingsFor(store, form.vehicle.value);
-  if (saved) { form.fuel.value = saved.fuel; form.price.value = saved.price; form.average.value = saved.average ?? ''; }
+  if (saved) { form.fuel.value = saved.fuel; form.price.value = saved.price; form.average.value = averageToField(saved.average); }
   else form.average.value = '';
   $('average-err').textContent = '';
   syncFuelChoices();
 }));
+// Picking a fuel on the Settings screen brings back the last price paid for it.
+form.fuel.addEventListener('change', () => {
+  const price = lastPrice(form.fuel.value);
+  if (price !== null) form.price.value = price;
+});
+// Language: first row of the settings. It applies at once; Italian also switches the consumption to km/L.
+form.lang.addEventListener('change', () => {
+  const typed = averageFromField(form.average.value); // read in the old language's unit
+  saveLang(form.lang.value);
+  applyStatic();
+  syncAverageLimits();
+  if (typed.value !== null && !typed.error) form.average.value = averageToField(typed.value);
+  fuelUnit = defaultFuelUnit();
+  try { localStorage.setItem(FUEL_UNIT_KEY, fuelUnit); } catch { /* not remembered */ }
+  $('average-err').textContent = '';
+  if ($('version').dataset.id) $('version').textContent = t('version', { id: $('version').dataset.id });
+});
+// Average consumption is stored in L/100 km (the model's unit). In Italian the field, Calc and the recap use km/L,
+// the unit people know there: km/L = 100 / (L/100 km).
+const AVG_KML_MIN = 100 / 40, AVG_KML_MAX = 100; // the 1–40 L/100 km range of checkAverage, in km/L
+const averageInKml = () => getLang() === 'it';
+function averageToField(l100) {
+  if (l100 == null || !(l100 > 0)) return '';
+  return averageInKml() ? Number((100 / l100).toFixed(1)) : l100;
+}
+function averageFromField(text) {
+  if (!averageInKml() || String(text).trim() === '') return checkAverage(text);
+  const kml = Number(String(text).replace(',', '.'));
+  if (!Number.isFinite(kml) || kml < AVG_KML_MIN || kml > AVG_KML_MAX) {
+    return { value: null, error: t('err.range', { name: t('field.average'), min: nf(AVG_KML_MIN, 1), max: AVG_KML_MAX, unit: 'km/L' }) };
+  }
+  return checkAverage(Math.round((100 / kml) * 100) / 100);
+}
+// the field's own limits follow the unit (the browser checks them before the form is sent)
+function syncAverageLimits() {
+  form.average.min = averageInKml() ? AVG_KML_MIN : 1;
+  form.average.max = averageInKml() ? AVG_KML_MAX : 40;
+}
+function averageText(l100) {
+  return averageInKml() ? `${nf(100 / l100, 1)} km/L` : `${nf(l100, 2)} L/100 km`;
+}
+
 function fillForm() {
+  form.lang.value = getLang();
+  syncAverageLimits();
   if (!settings) return;
   form.vehicle.value = settings.vehicle;
   form.fuel.value = settings.fuel;
   form.price.value = settings.price;
-  form.average.value = settings.average ?? '';
+  form.average.value = averageToField(settings.average);
   $('average-err').textContent = '';
   syncFuelChoices();
 }
@@ -150,7 +214,7 @@ function commitBasics() {
   const typed = Number(form.price.value);
   const price = typed > 0 ? typed : (saved?.price ?? settings?.price ?? DEFAULT_PRICE);
   const next = { vehicle, fuel, price, advanced: saved?.advanced };
-  const average = checkAverage(form.average.value);
+  const average = averageFromField(form.average.value);
   if (average.value !== null && !average.error) next.average = average.value;
   settings = next;
   refreshAdvanced();
@@ -166,7 +230,7 @@ function commitBasics() {
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();
-  const average = checkAverage(form.average.value);
+  const average = averageFromField(form.average.value);
   const next = { vehicle: form.vehicle.value, fuel: form.fuel.value, price: Number(form.price.value), advanced: settingsFor(store, form.vehicle.value)?.advanced };
   if (average.value !== null && !average.error) next.average = average.value;
   const previous = settings;
@@ -174,7 +238,7 @@ form.addEventListener('submit', (e) => {
   refreshAdvanced();
   // An average the vehicle cannot reach (below its idle fuel) is refused, so the user knows it was not applied.
   const unreachable = next.average !== undefined && (advanced ? advanced.kSource !== 'average' : quickK === null);
-  $('average-err').textContent = average.error || (unreachable ? 'This average is too low for this vehicle: it cannot be reached.' : '');
+  $('average-err').textContent = average.error || (unreachable ? t('set.avgTooLow') : '');
   if ($('average-err').textContent) { settings = previous; refreshAdvanced(); return; }
   saveSettings(settings);
   showSetup();
@@ -206,7 +270,7 @@ let calcValue = null;
 function updateCalc() {
   const r = averageFromFuel({ litres: $('calc-litres').value, km: $('calc-km').value });
   calcValue = r.value;
-  $('calc-result').textContent = r.error || (r.value === null ? 'Enter both values.' : `${r.value} L/100 km`);
+  $('calc-result').textContent = r.error || (r.value === null ? t('calc.enterBoth') : averageText(r.value));
   $('calc-use').disabled = r.value === null;
 }
 $('calc-open').addEventListener('click', () => {
@@ -221,7 +285,7 @@ $('calc-km').addEventListener('input', () => { updateCalc(); saveCalc(); });
 $('calc-form').addEventListener('submit', (e) => {
   e.preventDefault();
   if (calcValue === null) return;
-  form.average.value = calcValue;
+  form.average.value = averageToField(calcValue);
   $('average-err').textContent = '';
   $('calc-litres').value = '';   // this measurement is used up: the next fill-up starts a new one
   $('calc-km').value = '';
@@ -235,13 +299,13 @@ const advForm = $('advanced-form');
 const ADV_FIELDS = ['g', 'g1', 'maxLaden', 'displacement', 'ratedKw', 'co2'];
 function advResultText(p) {
   const parts = [isMoto()
-    ? `Tier 2 active. Mass with rider ${Math.round(p.m)} kg, power clamp ${(p.pMax / 1000).toFixed(0)} kW.`
-    : `Tier 2 active. Test mass ${Math.round(p.testMass)} kg.`];
+    ? t('adv.resMoto', { m: Math.round(p.m), p: Math.round(p.pMax / 1000) })
+    : t('adv.resCar', { m: Math.round(p.testMass) })];
   if (p.official !== null) {
     parts.push(p.kSource === 'average'
-      ? `Your own average ${p.official.toFixed(2)} L/100 km sets k.`
-      : `Official consumption ${p.official.toFixed(2)} L/100 km, with the real-world factor ${(p.official * 1.15).toFixed(2)}.`);
-    parts.push(`Fuel constant k = ${p.k.toFixed(3)} (Quick: ${FUELS[settings.fuel].k}). The model gives ${simulatedWltp(p).toFixed(2)} L/100 km on the ${isMoto() ? 'reference' : 'WLTP'} cycle.`);
+      ? t('adv.resOwn', { v: nf(p.official, 2) })
+      : t('adv.resOfficial', { v: nf(p.official, 2), w: nf(p.official * 1.15, 2) }));
+    parts.push(t('adv.resK', { k: nf(p.k, 3), q: nf(FUELS[settings.fuel].k, 2), s: nf(simulatedWltp(p), 2), cycle: t(isMoto() ? 'adv.cycleRef' : 'adv.cycleWltp') }));
   }
   if (p.note) parts.push(p.note);
   return parts.join(' ');
@@ -253,10 +317,8 @@ function openAdvanced() {
   const moto = isMoto();
   document.querySelectorAll('#screen-advanced [data-cars]').forEach((el) => { el.hidden = moto; });
   document.querySelectorAll('#screen-advanced [data-moto]').forEach((el) => { el.hidden = !moto; });
-  $('f-label').textContent = moto ? 'F.2: maximum laden mass (kg), optional' : 'F.1: maximum laden mass (kg), optional';
-  $('f-hint').textContent = moto
-    ? 'Used to estimate the mass of the bike if there is no G.'
-    : 'If there is no F.1, use F.2.';
+  $('f-label').textContent = t(moto ? 'adv.f2' : 'adv.f1');
+  $('f-hint').textContent = t(moto ? 'adv.f2Hint' : 'adv.f1Hint');
   const raw = settings.advanced || {};
   for (const f of ADV_FIELDS) advForm.elements[f].value = raw[f] ?? '';
   advForm.elements.body.value = raw.body || '';
@@ -308,7 +370,7 @@ function renderVehicleSwitch() {
     input.value = id;
     input.checked = id === settings.vehicle;
     const span = document.createElement('span');
-    span.textContent = PRESETS[id].label;
+    span.textContent = vehicleLabel(id);
     label.append(input, span);
     return label;
   }));
@@ -325,28 +387,47 @@ function showSetup() {
   const p = PRESETS[settings.vehicle];
   const badge = document.createElement('span');
   badge.className = 'tier';
-  badge.textContent = advanced ? 'Tier 2 · Advanced' : 'Tier 1 · Quick';
+  badge.textContent = t(advanced ? 'tier.adv' : 'tier.quick');
   const line = (text) => { const d = document.createElement('div'); d.textContent = text; return d; };
   $('recap').replaceChildren(
     badge,
-    line(`${p.label} · ${FUELS[settings.fuel].label} · €${settings.price.toFixed(3)} per litre`),
-    ...(settings.average ? [line(`Your average: ${settings.average} L/100 km`)] : []),
+    line(vehicleLabel(settings.vehicle)),
+    ...(settings.average ? [line(t('recap.average', { v: averageText(settings.average) }))] : []),
   );
   renderVehicleSwitch();
-  $('pax-label').textContent = PRESETS[settings.vehicle].gasolineOnly ? 'People on the bike' : 'People in the car';
+  $('setup-fuel').value = settings.fuel;
+  $('setup-fuel').disabled = Boolean(p.gasolineOnly); // two-wheelers: gasoline only
+  $('setup-price').value = settings.price;
+  $('setup-price').removeAttribute('aria-invalid');
+  $('pax-label').textContent = t(PRESETS[settings.vehicle].gasolineOnly ? 'setup.onBike' : 'setup.people');
   $('pax').textContent = setup.passengers;
-  $('setup-ac').closest('label').hidden = hasNoAc(); // scooters and motorcycles have no A/C
-  $('setup-ac').checked = setup.ac;
   $('setup-cold').checked = setup.cold;
-  $('setup-log').checked = setup.log;
   $('export-last').hidden = !hasSavedLogs();
   show('setup');
 }
+// Fuel and price on trip setup change the active vehicle's saved settings, like the Settings screen.
+function updateFuelSettings(change) {
+  settings = { ...settings, ...change };
+  refreshAdvanced(); // the fuel changes k (Quick) and the LPG conversion (Tier 2)
+  saveSettings(settings);
+}
+$('setup-fuel').addEventListener('change', (e) => {
+  const fuel = e.target.value;
+  // a price typed but not yet committed (the field may still have focus) belongs to the fuel being left
+  const typed = Number($('setup-price').value);
+  if ($('setup-price').value !== '' && typed >= 0.1 && typed <= 10 && typed !== settings.price) updateFuelSettings({ price: typed });
+  updateFuelSettings({ fuel, price: lastPrice(fuel) ?? settings.price });
+  showSetup(); // the tier badge may change
+});
+$('setup-price').addEventListener('change', (e) => {
+  const price = Number(e.target.value);
+  const ok = e.target.value !== '' && price >= 0.1 && price <= 10;
+  e.target.setAttribute('aria-invalid', String(!ok));
+  if (ok) updateFuelSettings({ price });
+});
 $('pax-minus').addEventListener('click', () => { setup.passengers = Math.max(1, setup.passengers - 1); $('pax').textContent = setup.passengers; });
 $('pax-plus').addEventListener('click', () => { setup.passengers = Math.min(9, setup.passengers + 1); $('pax').textContent = setup.passengers; });
-$('setup-ac').addEventListener('change', (e) => { setup.ac = e.target.checked; });
 $('setup-cold').addEventListener('change', (e) => { setup.cold = e.target.checked; });
-$('setup-log').addEventListener('change', (e) => { setup.log = e.target.checked; });
 $('start').addEventListener('click', () => startTrip({ demo: false }));
 $('demo').addEventListener('click', () => startTrip({ demo: true }));
 $('done').addEventListener('click', showSetup);
@@ -410,11 +491,11 @@ function checkAltitude({ v, t, alt }) {
 // The GPS line: setup screen and trip screen share the wording and the coloured dot.
 function gpsLine(s) {
   const acc = `GPS ±${Math.ceil(s.accuracy)} m`;
-  if (s.accuracy > POOR_ACCURACY) return { state: 'poor', text: trip ? `${acc} · weak signal, reading held` : `${acc} · weak signal` };
-  if (s.accuracy > GOOD_ACCURACY) return { state: 'fair', text: trip ? `${acc} · reading held` : `${acc} · not precise yet` };
-  if (s.alt == null) return { state: 'ok', text: `${acc} · no altitude` };
-  if (!altTrust.trusted) return { state: 'settle', text: `${acc} · altitude settling` };
-  return { state: 'ok', text: trip ? acc : `${acc} · altitude ${Math.round(s.alt)} m` };
+  if (s.accuracy > POOR_ACCURACY) return { state: 'poor', text: t(trip ? 'gps.weakHeld' : 'gps.weak', { acc }) };
+  if (s.accuracy > GOOD_ACCURACY) return { state: 'fair', text: t(trip ? 'gps.held' : 'gps.notPrecise', { acc }) };
+  if (s.alt == null) return { state: 'ok', text: t('gps.noAlt', { acc }) };
+  if (!altTrust.trusted) return { state: 'settle', text: t('gps.altSettling', { acc }) };
+  return { state: 'ok', text: trip ? acc : t('gps.alt', { acc, h: Math.round(s.alt) }) };
 }
 
 // The GPS line on trip setup, from the latest warm-up sample (null: nothing received yet).
@@ -422,7 +503,7 @@ function gpsLine(s) {
 // reading (grey) until the accuracy reaches GOOD_ACCURACY. Only a blocked or missing GPS disables it.
 function renderGpsReady(s) {
   const el = $('gps-ready');
-  const { state, text } = s ? gpsLine(s) : { state: 'wait', text: 'Waiting for GPS…' };
+  const { state, text } = s ? gpsLine(s) : { state: 'wait', text: t('gps.waiting') };
   el.textContent = text;
   el.dataset.state = state;
   $('start').disabled = false;
@@ -459,12 +540,14 @@ function cruiseReference() {
   return toCost({ litres: fuelAt(CRUISE_SPEED, 0), price: settings.price });
 }
 
-function startTrip({ demo }) {
+// replay: a trip run from a log file (see replayTrip): no log, no GPS, no trip screen
+function startTrip({ demo, replay = false }) {
   trip = {
     passengers: setup.passengers,
-    ac: setup.ac && !hasNoAc(),
+    ac: false,        // A/C starts off; the A/C button on the trip screen turns it on
     cold: setup.cold,
     demo,
+    replay,
     startMs: Date.now(),
     paused: false,
     lastT: null,      // time of the previous sample (ms)
@@ -484,34 +567,40 @@ function startTrip({ demo }) {
     acLitres: 0,      // fuel attributable to A/C (estimated)
     idleLitres: 0,    // fuel burned while stopped
     ref: null,        // cost at steady cruise (€/h)
+    recent: [{ s: 0, L: 0 }], // running totals (seconds, litres) for the last-5-minutes average
+    profile: [],      // { d, h, L, s } per sample, for the altitude profile on the summary
     demoTimer: null,
   };
   trip.ref = cruiseReference();
-  if (setup.log) {
-    startLog({ startMs: trip.startMs, meta: logMeta() });
-    // what the GPS said while the trip was being set up: negative times, before the start
-    if (!demo) for (const s of warmup) {
-      logAdd({ t_s: (s.t - trip.startMs) / 1000, v_ms: s.v, gps_acc_m: s.accuracy, alt_m: s.alt, alt_acc_m: s.altAcc }, s.note);
-    }
+  if (replay) { warmup = []; return; } // replayTrip feeds the samples and ends the trip itself
+  // every trip is logged (on this phone only; exported by the user)
+  startLog({ startMs: trip.startMs, meta: logMeta() });
+  // what the GPS said while the trip was being set up: negative times, before the start
+  if (!demo) for (const s of warmup) {
+    logAdd({ t_s: (s.t - trip.startMs) / 1000, v_ms: s.v, gps_acc_m: s.accuracy, alt_m: s.alt, alt_acc_m: s.altAcc }, s.note);
   }
   warmup = [];
-  $('trip-ac').closest('label').hidden = hasNoAc();
+  $('trip-ac').hidden = hasNoAc();
   $('trip-ac').closest('.controls').classList.toggle('no-ac', hasNoAc());
-  $('trip-ac').checked = trip.ac;
-  $('pause').textContent = 'Pause';
-  $('value').textContent = '—';
-  $('value').dataset.band = 'none';
-  $('unit').textContent = '€/h';
+  $('trip-ac').setAttribute('aria-pressed', String(trip.ac));
+  setPauseButton(false);
   $('speed').textContent = '0';
   $('grade-value').textContent = '–';
   $('grade-value').dataset.dir = '';
   $('altitude').textContent = '–';
   $('trip-cost').textContent = '0.00';
-  $('avg-mark').hidden = true;
+  $('distance').textContent = '0.0';
+  renderFuelAverage();
+  $('avg-mark').toggleAttribute('hidden', true);
+  setDialValue('—');
+  $('dial-value').style.removeProperty('--cost-color');
   $('avg-value').textContent = '–';
-  $('now-mark').style.left = '0%';
+  $('recent-mark').toggleAttribute('hidden', true);
+  $('recent-value').textContent = '–';
+  $('now-mark').style.transform = dialRotation(0);
   if (demo) resetAltitude(); // the demo has its own altitude; a real trip keeps what trip setup learned
-  setStatus('Waiting for GPS…', 'wait');
+  setStatus(t('gps.waiting'), 'wait');
+  setGpsBars(null);
   setHeld(false);
   show('trip');
   requestWakeLock();
@@ -520,16 +609,27 @@ function startTrip({ demo }) {
   else ensureGps(); // normally already running since trip setup
 }
 
-function setStatus(text, state = 'poor') { $('status').textContent = text; $('status').dataset.state = state; }
+function setStatus(text, state = 'poor') {
+  $('status').textContent = text;
+  $('status').dataset.state = state; // text colour
+  $('status-bar').dataset.state = text ? state : ''; // dot colour; no dot without text
+}
+
+function setGpsBars(accuracy) {
+  const n = signalBars(accuracy);
+  const el = $('gps-bars');
+  el.dataset.bars = String(n);
+  el.setAttribute('aria-label', n ? t('gps.bars', { n }) : t('gps.barsNone'));
+}
 
 // ----- GPS source: see gps.js -----
 function gpsProblem(kind) {
   let text;
-  if (kind === 'unsupported') text = 'This browser has no location support.';
-  else if (kind === 'denied') text = 'Location is blocked. Allow it for this site in your browser settings, then reload.';
-  else text = 'GPS signal lost. Waiting for it to return…';
+  if (kind === 'unsupported') text = t('gps.unsupported');
+  else if (kind === 'denied') text = t('gps.denied');
+  else text = t('gps.lost');
   if (kind !== 'lost') gpsOn = false; // the watch is dead: try again next time trip setup opens
-  if (trip) { if (!trip.demo) setStatus(text); return; }
+  if (trip) { if (!trip.demo) { setStatus(text); setGpsBars(null); } return; }
   $('gps-ready').textContent = text;
   $('gps-ready').dataset.state = 'poor';
   if (kind !== 'lost') $('start').disabled = true; // no GPS at all: no trip (the demo drive still works)
@@ -575,6 +675,7 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
 
   const line = gpsLine({ accuracy, alt });
   setStatus(line.text, line.state);
+  setGpsBars(accuracy);
   const held = accuracy > GOOD_ACCURACY; // amber or red: the display is held and greyed
   setHeld(held);
 
@@ -623,6 +724,10 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
   trip.litres += dL;
   trip.distance += v * dt;
   trip.seconds += dt;
+  trip.recent.push({ s: trip.seconds, L: trip.litres });
+  // keep one entry at or before the window start, so the window spans the full 5 minutes
+  while (trip.recent.length > 1 && trip.recent[1].s <= trip.seconds - RECENT_WINDOW) trip.recent.shift();
+  if (trip.altS != null) trip.profile.push({ d: trip.distance, h: trip.altS, L: trip.litres, s: trip.seconds });
   if (v < 0.5) trip.idleLitres += dL;
   if (trip.ac) {
     const withoutAc = fuelAtWithoutAc(v, trip.aS, theta);
@@ -656,7 +761,7 @@ function fuelAtWithoutAc(v, a, theta) {
 function logMeta() {
   const e = engineParams();
   return {
-    app_version: $('version').textContent.replace('Version ', '') || 'unknown',
+    app_version: $('version').dataset.id || 'unknown',
     started: new Date(trip.startMs).toISOString(),
     demo: trip.demo,
     vehicle: settings.vehicle,
@@ -687,8 +792,21 @@ function powerTerms(v, a, theta) {
   return { total, inertia: total - noAccel, grade: noAccel - flat, rolling: flat - drag, drag, ac: e.pAc };
 }
 
-$('export-log').addEventListener('click', exportLatestLog);
-$('export-last').addEventListener('click', exportLatestLog);
+// Export: a dialog asks where the trip went From and To (both optional, empty each time) for the file name.
+const exportDialog = $('export-dialog');
+function openExportDialog() {
+  $('export-from').value = '';
+  $('export-to').value = '';
+  exportDialog.showModal();
+}
+$('export-log').addEventListener('click', openExportDialog);
+$('export-last').addEventListener('click', openExportDialog);
+$('export-cancel').addEventListener('click', () => exportDialog.close());
+$('export-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  exportDialog.close();
+  exportLatestLog({ from: $('export-from').value, to: $('export-to').value }); // still inside the tap, as sharing needs
+});
 
 // ----- road slope from GPS altitude -----
 // The altitude at the last accepted update is the anchor; the distance driven since then is
@@ -726,9 +844,9 @@ function renderGrade() {
   const el = $('grade-value');
   if (trip.theta == null) { el.textContent = '–'; el.dataset.dir = ''; return; }
   const percent = Math.round(Math.tan(trip.theta) * 100); // rise per 100 m of road, in %
-  if (Math.abs(Math.tan(trip.theta)) < 0.01) { el.textContent = '▬ 0%'; el.dataset.dir = 'flat'; }
+  if (Math.abs(Math.tan(trip.theta)) < 0.01) { el.textContent = '▬'; el.dataset.dir = 'flat'; }
   else if (percent > 0) { el.textContent = `▲ +${percent}%`; el.dataset.dir = 'up'; }
-  else { el.textContent = `▼ −${Math.abs(percent)}%`; el.dataset.dir = 'down'; }
+  else { el.textContent = `▼ ${Math.abs(percent)}%`; el.dataset.dir = 'down'; }
 }
 
 // ----- display -----
@@ -738,38 +856,189 @@ function render() {
   const ref = trip.ref;
   const ratio = cost / ref;
 
-  $('value').textContent = cost.toFixed(2);
-  $('value').dataset.band = ratio < 0.8 ? 'low' : ratio < 1.3 ? 'mid' : 'high';
   $('speed').textContent = Math.round(trip.vS * 3.6);
-  $('trip-cost').textContent = toCost({ litres: trip.litres, price }).toFixed(2);
+  $('trip-cost').textContent = nf(toCost({ litres: trip.litres, price }), 2);
+  $('distance').textContent = nf(trip.distance / 1000, 1);
+  renderFuelAverage();
   renderGrade();
   $('altitude').textContent = trip.altS == null ? '–' : Math.round(trip.altS);
 
-  // scale runs 0 to 2x the cruising cost, so the cruise tick sits at 50%
-  $('now-mark').style.left = `${Math.min(1, ratio / 2) * 100}%`;
-  $('cruise-label').textContent = `Typical cruise ${ref.toFixed(2)}`;
+  // scale runs 0 to 2x the cruising cost, so cruise sits at 50%, straight up
+  $('now-mark').style.transform = dialRotation(ratio / 2);
+  setDialValue(nf(cost, 1));
+  $('dial-value').style.setProperty('--cost-color', costColor(Math.min(1, ratio / 2)));
+  setDialScale(ref);
 
   // trip average (€/h over the trip time, pauses excluded): above the bar and as a marker (needs 30 s)
   const avg = trip.seconds > 30 ? toCost({ litres: trip.litres, price }) / (trip.seconds / 3600) : null;
-  $('avg-value').textContent = avg == null ? '–' : avg.toFixed(2);
-  $('avg-mark').hidden = avg == null;
-  if (avg != null) $('avg-mark').style.left = `${Math.min(1, avg / ref / 2) * 100}%`;
+  $('avg-value').textContent = avg == null ? '–' : nf(avg, 1);
+  placeMark('avg-mark', avg, ref);
+
+  // last 5 minutes of trip time (pauses excluded); until then the same as the trip average
+  const base = trip.recent[0];
+  const span = trip.seconds - base.s;
+  const recent = trip.seconds > 30 ? toCost({ litres: trip.litres - base.L, price }) / (span / 3600) : null;
+  $('recent-value').textContent = recent == null ? '–' : nf(recent, 1);
+  placeMark('recent-mark', recent, ref);
+}
+
+// Fuel average over the trip, in L/100 km or km/L (tap to switch; needs 300 m to mean anything)
+const FUEL_UNIT_KEY = 'fuelprice.fuelUnit';
+// Default: km/L in Italian (the usual unit there), L/100 km otherwise; a tap overrides it until the language changes.
+const defaultFuelUnit = () => (getLang() === 'it' ? 'kml' : 'l100');
+let fuelUnit = defaultFuelUnit();
+try { const u = localStorage.getItem(FUEL_UNIT_KEY); if (u === 'kml' || u === 'l100') fuelUnit = u; } catch { /* default unit */ }
+
+function renderFuelAverage() {
+  const km = trip.distance / 1000;
+  const kml = fuelUnit === 'kml';
+  $('fuel-unit').textContent = kml ? 'km/L' : 'L/100 km';
+  let text = '–';
+  if (trip.distance > 300) {
+    if (!kml) text = nf(trip.litres / km * 100, 1);
+    else if (trip.litres > 0.01) text = nf(km / trip.litres, 1); // almost no fuel yet (downhill): no figure
+  }
+  $('fuel-avg').textContent = text;
+}
+
+$('fuel-toggle').addEventListener('click', () => {
+  fuelUnit = fuelUnit === 'kml' ? 'l100' : 'kml';
+  try { localStorage.setItem(FUEL_UNIT_KEY, fuelUnit); } catch { /* not remembered */ }
+  if (trip) renderFuelAverage();
+});
+
+// Colour at a position on the scale (0–1): cyan at 0, green at 0.25, yellow at 0.75, red at 1 (the max) and above,
+// shading in between. Used by the dial's arc, the figure and the altitude profile.
+function costColor(pos) {
+  const mix = (from, to, a, b) => `color-mix(in oklab, var(${to}) ${(((pos - a) / (b - a)) * 100).toFixed(0)}%, var(${from}))`;
+  if (pos <= 0) return 'var(--scale-0)';
+  if (pos < 0.25) return mix('--scale-0', '--scale-25', 0, 0.25);
+  if (pos < 0.75) return mix('--scale-25', '--scale-75', 0.25, 0.75);
+  if (pos < 1) return mix('--scale-75', '--scale-100', 0.75, 1);
+  return 'var(--scale-100)';
+}
+
+function placeMark(id, cost, ref) {
+  $(id).toggleAttribute('hidden', cost == null); // SVG elements have no .hidden property
+  if (cost != null) $(id).style.transform = dialRotation(cost / ref / 2);
+}
+
+// ----- dial -----
+// The number stays centred under the pivot; the unit follows its right edge.
+// The figure is drawn as seven-segment digits, centred under the pivot; the unit follows its right edge.
+const DIGIT = { w: 20, h: 36, t: 4.4, gap: 4.5, slant: 0.12 };
+let dialText = null;
+function setDialValue(text) {
+  if (text === dialText) return;
+  dialText = text;
+  const { segments, width } = segmentPaths(text, DIGIT);
+  const lean = (DIGIT.h / 2) * DIGIT.slant; // the slant moves the figure right by about this much
+  const g = $('dial-value');
+  g.setAttribute('transform', `translate(${(-width / 2 - lean).toFixed(1)} 56)`);
+  g.replaceChildren(...segments.map((s) => {
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', s.d);
+    if (!s.on) p.setAttribute('class', 'off');
+    return p;
+  }));
+  $('dial-unit').setAttribute('x', (width / 2 - lean + 5).toFixed(1));
+}
+
+// The scale runs 0 to 2× the cruising cost over 200°, from −110°; cruise sits 10° left of straight up, so that the
+// band above the maximum fits in the 220° the scale used to fill.
+const DIAL_SWEEP = 200; // degrees, 0 to 2× cruise
+const DIAL_START = -110; // angle of 0 € (0° = up): the scale and the band above it together fill −110° … +113°
+const DIAL_R = 100;     // arc radius, in the SVG's units (see index.html)
+
+/** Rotation for a scale position (0–1, clamped), as a CSS transform about the dial centre. */
+// Above the maximum (2× cruise) the pointer goes on into a 20° band up to 3× cruise (scale position 1.5), then stops.
+const DIAL_OVER = 20;      // degrees
+const DIAL_OVER_POS = 0.5; // scale positions the band covers (2× → 3× cruise)
+const DIAL_OVER_GAP = 3;   // degrees between the arc's round end and the band
+function dialAngle(pos) {
+  const p = Math.max(0, Math.min(1 + DIAL_OVER_POS, pos));
+  if (p <= 1) return DIAL_START + p * DIAL_SWEEP;
+  return DIAL_START + DIAL_SWEEP + DIAL_OVER_GAP + ((p - 1) / DIAL_OVER_POS) * DIAL_OVER;
+}
+function dialRotation(pos) {
+  return `rotate(${dialAngle(pos).toFixed(1)}deg)`;
+}
+
+// The shaded arc: short segments, each in the colour of its position (an SVG stroke cannot follow a curve's gradient).
+function drawDialArc() {
+  const n = 55;
+  const point = (deg) => {
+    const a = (deg * Math.PI) / 180;
+    return `${(DIAL_R * Math.sin(a)).toFixed(2)} ${(-DIAL_R * Math.cos(a)).toFixed(2)}`;
+  };
+  const step = DIAL_SWEEP / n;
+  for (let i = 0; i < n; i++) {
+    const from = DIAL_START + i * step;
+    const to = from + step + (i < n - 1 ? 0.6 : 0); // small overlap hides seams between segments
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M ${point(from)} A ${DIAL_R} ${DIAL_R} 0 0 1 ${point(to)}`);
+    path.style.stroke = costColor((i + 0.5) / n);
+    if (i === 0 || i === n - 1) path.style.strokeLinecap = 'round';
+    $('gauge-arc').append(path);
+  }
+}
+drawDialArc();
+
+// The band above the maximum: from just past the arc's round end, 20° wide, as wide as the arc (radius ±7).
+// Outline on three sides; the side next to the maximum is left open.
+function drawDialOver() {
+  const from = DIAL_START + DIAL_SWEEP + DIAL_OVER_GAP, to = from + DIAL_OVER, ro = DIAL_R + 7, ri = DIAL_R - 7;
+  const at = (r, deg) => { const a = (deg * Math.PI) / 180; return `${(r * Math.sin(a)).toFixed(2)} ${(-r * Math.cos(a)).toFixed(2)}`; };
+  $('gauge-over').setAttribute('d', `M ${at(ro, from)} A ${ro} ${ro} 0 0 1 ${at(ro, to)} L ${at(ri, to)} A ${ri} ${ri} 0 0 0 ${at(ri, from)}`); // open at the max end: no closing edge
+}
+drawDialOver();
+
+// Ticks and figures at every quarter of the scale: 0, ½, 1 (cruise, top), 1½ and 2× the cruising cost.
+const DIAL_STEPS = [0, 0.25, 0.5, 0.75, 1];
+function drawDialScale() {
+  const svg = 'http://www.w3.org/2000/svg';
+  for (const pos of DIAL_STEPS) {
+    const a = ((DIAL_START + pos * DIAL_SWEEP) * Math.PI) / 180;
+    const at = (r) => [(r * Math.sin(a)).toFixed(2), (-r * Math.cos(a)).toFixed(2)];
+    const tick = document.createElementNS(svg, 'line');
+    const [x1, y1] = at(DIAL_R - 8), [x2, y2] = at(DIAL_R - 16);
+    Object.entries({ x1, y1, x2, y2, class: 'tick' }).forEach(([k, v]) => tick.setAttribute(k, v));
+    const label = document.createElementNS(svg, 'text');
+    const [x, y] = at(DIAL_R - 28);
+    Object.entries({ x, y, class: pos === 0.5 ? 'step cruise' : 'step' }).forEach(([k, v]) => label.setAttribute(k, v));
+    $('gauge-scale').append(tick, label);
+  }
+}
+drawDialScale();
+
+let dialScaleRef = null;
+function setDialScale(ref) {
+  if (ref === dialScaleRef) return;
+  dialScaleRef = ref;
+  const labels = $('gauge-scale').querySelectorAll('text');
+  DIAL_STEPS.forEach((pos, i) => { labels[i].textContent = String(Math.round(pos * 2 * ref)); }); // whole euros
 }
 
 // ----- controls -----
-$('trip-ac').addEventListener('change', (e) => {
+$('trip-ac').addEventListener('click', () => {
   if (!trip) return;
-  trip.ac = e.target.checked;
+  trip.ac = !trip.ac;
+  $('trip-ac').setAttribute('aria-pressed', String(trip.ac));
   trip.ref = cruiseReference();
 });
+
+function setPauseButton(paused) {
+  $('pause').dataset.paused = String(paused);
+  $('pause').setAttribute('aria-label', t(paused ? 'trip.resume' : 'trip.pause'));
+}
 
 $('pause').addEventListener('click', () => {
   if (!trip) return;
   trip.paused = !trip.paused;
   trip.lastT = null;
   resetSlopeWindow();
-  $('pause').textContent = trip.paused ? 'Resume' : 'Pause';
-  setStatus(trip.paused ? 'Paused' : '');
+  setPauseButton(trip.paused);
+  setStatus(trip.paused ? t('trip.paused') : '');
   logAdd({ t_s: (Date.now() - trip.startMs) / 1000 }, trip.paused ? 'pause' : 'resume');
 });
 
@@ -793,14 +1062,62 @@ stopBtn.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // "~2 months", "~3 weeks", "~5 days": a tree's absorption time, rounded for reading.
 function treeTime(days) {
-  if (days < 1) return 'less than a day';
-  if (days < 14) return `~${Math.round(days)} ${Math.round(days) === 1 ? 'day' : 'days'}`;
-  if (days < 60) return `~${Math.round(days / 7)} weeks`;
-  if (days < 700) return `~${Math.round(days / 30)} months`;
-  return `~${(days / 365).toFixed(1)} years`;
+  if (days < 1) return t('tree.lessThanDay');
+  if (days < 14) return t('tree.days', { n: Math.round(days) });
+  if (days < 60) return t('tree.weeks', { n: Math.round(days / 7) });
+  if (days < 700) return t('tree.months', { n: Math.round(days / 30) });
+  return t('tree.years', { n: nf(days / 365, 1) });
 }
 
-function endTrip() {
+// ---------- replay a trip from a log file ----------
+// The log's GPS rows go through the same pipeline as a live drive (onSample), all at once, with the active
+// vehicle's settings and price; the people and the A/C at the start come from the log. Pauses are kept.
+// Nothing is logged and the GPS is off meanwhile. Ends on the summary, with a note naming the file.
+function replayTrip(log, fileName) {
+  const gpsRows = log.rows.filter((r) => r.v != null && r.t >= 0);
+  if (gpsRows.length < 2) throw new Error(t('replay.noGps'));
+  endGps();
+  startTrip({ demo: false, replay: true });
+  trip.passengers = Math.min(9, Math.max(1, Math.round(Number(log.meta.passengers)) || setup.passengers));
+  trip.ac = log.meta.ac_at_start === 'true' && !hasNoAc();
+  trip.ref = cruiseReference();
+  resetAltitude();
+  const t0 = trip.startMs;
+  // warm-up rows teach the altitude check, as on trip setup
+  for (const r of log.rows) {
+    if (r.t < 0 && r.v != null && r.acc != null && r.acc <= GOOD_ACCURACY) checkAltitude({ v: r.v, t: t0 + r.t * 1000, alt: r.alt });
+  }
+  for (const r of log.rows) {
+    if (r.t < 0) continue;
+    if (r.v == null) {
+      if (r.note === 'pause') trip.paused = true;
+      else if (r.note === 'resume') { trip.paused = false; trip.lastT = null; resetSlopeWindow(); }
+      continue;
+    }
+    onSample({ v: r.v, accuracy: r.acc ?? GOOD_ACCURACY, t: t0 + r.t * 1000, alt: r.alt, altAcc: r.altAcc });
+  }
+  trip.paused = false;
+  endTrip({ replayOf: fileName });
+}
+
+$('replay').addEventListener('click', () => { $('replay-err').hidden = true; $('replay-file').click(); });
+$('replay-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = ''; // the same file can be picked again
+  if (!file) return;
+  try {
+    const log = parseLog(await file.text());
+    if (!log) throw new Error(t('replay.notLog'));
+    replayTrip(log, file.name);
+  } catch (err) {
+    trip = null;
+    $('replay-err').textContent = err.message;
+    $('replay-err').hidden = false;
+    showSetup();
+  }
+});
+
+function endTrip({ replayOf = null } = {}) {
   if (!trip) return;
   endGps();
   if (trip.demoTimer) clearInterval(trip.demoTimer);
@@ -812,28 +1129,24 @@ function endTrip() {
   const total = toCost({ litres: trip.litres, price });
   const mins = Math.round(trip.seconds / 60);
   const rows = [
-    ['Distance', `${km.toFixed(1)} km`],
-    ['Time', `${mins} min`],
-    ['Fuel', `${trip.litres.toFixed(2)} L`],
-    ['Total cost', `€${total.toFixed(2)}`],
-    ['Average', trip.seconds > 30 ? `€${(total / (trip.seconds / 3600)).toFixed(2)}/h` : '—'],
-    ['Idling', `€${toCost({ litres: trip.idleLitres, price }).toFixed(2)}`],
+    [t('sum.distance'), `${nf(km, 1)} km`],
+    [t('sum.time'), `${mins} min`],
+    [t('sum.fuel'), `${nf(trip.litres, 2)} L`],
+    [t('sum.total'), `€${nf(total, 2)}`],
+    [t('sum.average'), trip.seconds > 30 ? `€${nf(total / (trip.seconds / 3600), 1)}/h` : '—'],
+    [t('sum.idling'), `€${nf(toCost({ litres: trip.idleLitres, price }), 2)}`],
   ];
   const co2 = co2FromFuel({ litres: trip.litres, fuel: settings.fuel });
-  rows.push(['CO₂', `${co2.toFixed(1)} kg`]);
+  rows.push([t('sum.co2'), `${nf(co2, 1)} kg`]);
   const days = treeDays({ co2 });
-  rows.push(['🌳 Time to absorb', treeTime(days), 'tree']);
-  if (trip.acLitres > 0) rows.push(['A/C', `€${toCost({ litres: trip.acLitres, price }).toFixed(2)}`]);
-  const fuelLabel = FUELS[settings.fuel].label.toLowerCase();
+  rows.push([t('sum.tree'), treeTime(days), 'tree']);
+  if (trip.acLitres > 0) rows.push([t('sum.ac'), `€${nf(toCost({ litres: trip.acLitres, price }), 2)}`]);
   const detail = $('tree-detail');
   detail.hidden = true;
-  detail.textContent =
-    `This trip burned ${trip.litres.toFixed(2)} L of ${fuelLabel}. Each litre releases about ` +
-    `${CO2_PER_LITRE[settings.fuel]} kg of CO₂ when burned, so the trip emitted ${co2.toFixed(1)} kg. ` +
-    `A typical mature tree absorbs about ${TREE_KG_PER_YEAR} kg of CO₂ per year (estimates range from ` +
-    `15 to 25 kg, depending on species and size), so one tree would need ${treeTime(days)} ` +
-    `(${Math.round(days)} days) to take it back up. Only the fuel burned in the engine is counted, ` +
-    `not its production or transport.`;
+  detail.textContent = t('tree.detail', {
+    litres: nf(trip.litres, 2), fuel: fuelLabel(settings.fuel).toLowerCase(), perLitre: nf(CO2_PER_LITRE[settings.fuel], 2),
+    co2: nf(co2, 1), perYear: TREE_KG_PER_YEAR, time: treeTime(days), days: Math.round(days),
+  });
   $('summary').replaceChildren(...rows.map(([k, v, kind]) => {
     const d = document.createElement('div');
     const dt = document.createElement('dt'); dt.textContent = k;
@@ -853,9 +1166,59 @@ function endTrip() {
     }
     return d;
   }));
+  drawProfile(trip.profile, trip.ref, price);
   $('export-log').hidden = !hadLog;
+  const note = $('summary-note');
+  note.hidden = !replayOf;
+  note.textContent = replayOf ? t('sum.replay', { file: replayOf, vehicle: vehicleLabel(settings.vehicle), fuel: fuelLabel(settings.fuel), price: nf(settings.price, 3) }) : '';
   trip = null;
   show('summary');
+}
+
+// ---------- altitude profile (summary) ----------
+// Altitude along the road, each stretch coloured by its cost per hour on the dial's scale.
+// Not shown for trips under 300 m or without altitude.
+function drawProfile(points, ref, price) {
+  const fig = $('profile');
+  const svg = $('profile-svg');
+  svg.replaceChildren();
+  const bins = binProfile(points);
+  const total = points.length ? points[points.length - 1].d - points[0].d : 0;
+  fig.hidden = bins.length < 2 || total < 300;
+  if (fig.hidden) return;
+
+  const { min, max } = extremes(bins);
+  // plot box inside the 320 × 132 viewBox; altitude labels on the left, distance below
+  const X0 = 44, X1 = 314, Y0 = 8, Y1 = 110;
+  const span = Math.max(20, max.h - min.h); // a flat trip stays flat instead of magnifying noise
+  const mid = (max.h + min.h) / 2;
+  const x = (d) => X0 + (d / bins[bins.length - 1].d) * (X1 - X0);
+  const y = (h) => Y1 - ((h - (mid - span / 2)) / span) * (Y1 - Y0);
+  const ns = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text != null) e.textContent = text;
+    svg.append(e);
+    return e;
+  };
+  const pts = bins.map((b) => [x(b.d).toFixed(1), y(b.h).toFixed(1)]);
+  el('polygon', { class: 'area', points: `${pts[0][0]},${Y1} ${pts.map((p) => p.join(',')).join(' ')} ${pts[pts.length - 1][0]},${Y1}` });
+  for (let i = 1; i < bins.length; i++) {
+    const rate = bins[i].rate;
+    const color = rate == null ? 'var(--dim)' : costColor((toCost({ litres: rate, price }) / ref) / 2);
+    el('line', { class: 'seg', x1: pts[i - 1][0], y1: pts[i - 1][1], x2: pts[i][0], y2: pts[i][1], style: `stroke:${color}` });
+  }
+  // max and min as labels on the vertical axis, each with a thin dashed line across the plot
+  for (const b of [max, min]) {
+    const py = y(b.h).toFixed(1);
+    el('line', { class: 'guide', x1: X0, y1: py, x2: X1, y2: py });
+    el('text', { class: 'ext', x: X0 - 5, y: py, 'text-anchor': 'end', 'dominant-baseline': 'central' }, `${Math.round(b.h)} m`);
+  }
+  svg.prepend(...svg.querySelectorAll('.guide')); // under the curve
+  el('text', { class: 'axis', x: X0, y: 128, 'text-anchor': 'start' }, '0 km');
+  el('text', { class: 'axis', x: X1, y: 128, 'text-anchor': 'end' }, `${nf(total / 1000, 1)} km`);
+  svg.setAttribute('aria-label', t('sum.profileAria', { min: Math.round(min.h), max: Math.round(max.h), km: nf(total / 1000, 1) }));
 }
 
 // ---------- screen wake lock ----------
@@ -874,7 +1237,21 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && trip) requestWakeLock();
 });
 
+// The version label stays hidden (it made the page scroll); three quick taps on the New trip background show or hide it.
+{
+  let taps = [];
+  $('screen-setup').addEventListener('click', (e) => {
+    if (e.target !== e.currentTarget) return; // a button, a field or a row: not the background
+    const now = Date.now();
+    taps = [...taps.filter((tm) => now - tm < 700), now];
+    if (taps.length >= 3) { taps = []; if ($('version').textContent) $('version').hidden = !$('version').hidden; }
+  });
+}
+
 // ---------- boot ----------
+applyStatic();
+form.lang.value = getLang();
+syncAverageLimits();
 if (settings) showSetup();
 else { $('settings-cancel').hidden = true; $('average-field').hidden = true; show('settings'); }
 
@@ -882,5 +1259,5 @@ else { $('settings-cancel').hidden = true; $('average-field').hidden = true; sho
 // Never reload mid-trip; the version label shows which files are running.
 startUpdates({
   isBusy: () => Boolean(trip),
-  onVersion: (id) => { $('version').textContent = `Version ${id}`; },
+  onVersion: (id) => { $('version').dataset.id = id; $('version').textContent = t('version', { id }); },
 });

@@ -46,6 +46,41 @@ export function buildCsv({ meta, rows }) {
   return [...head, [...LOG_COLUMNS.map(([n]) => n), 'note'].join(','), ...rows].join('\n') + '\n';
 }
 
+/**
+ * Read a log file back (for Replay trip): the `# key=value` lines and, per row, what the GPS gave
+ * plus the note. Columns are found by name, so older logs with other columns still read.
+ * @param {string} text  CSV text as written by buildCsv
+ * @returns {{meta: Object<string,string>, rows: {t:number, v:number|null, acc:number|null, alt:number|null, altAcc:number|null, note:string}[]}|null}
+ *   null when the text is not a log (no t_s and v_ms columns)
+ */
+export function parseLog(text) {
+  const lines = String(text).split(/\r?\n/).filter((l) => l.trim() !== '');
+  const meta = {};
+  let i = 0;
+  for (; i < lines.length && lines[i].startsWith('#'); i++) {
+    const m = lines[i].match(/^#\s*([^=]+)=(.*)$/);
+    if (m) meta[m[1].trim()] = m[2].trim();
+  }
+  if (i >= lines.length) return null;
+  const cols = lines[i].split(',').map((c) => c.trim());
+  const at = (name) => cols.indexOf(name);
+  const [ti, vi, ai, hi, hai, ni] = ['t_s', 'v_ms', 'gps_acc_m', 'alt_m', 'alt_acc_m', 'note'].map(at);
+  if (ti < 0 || vi < 0) return null;
+  const num = (cells, k) => {
+    if (k < 0 || cells[k] == null || cells[k].trim() === '') return null;
+    const x = Number(cells[k]);
+    return Number.isFinite(x) ? x : null;
+  };
+  const rows = [];
+  for (const line of lines.slice(i + 1)) {
+    const cells = line.split(',');
+    const t = num(cells, ti);
+    if (t === null) continue;
+    rows.push({ t, v: num(cells, vi), acc: num(cells, ai), alt: num(cells, hi), altAcc: num(cells, hai), note: ni < 0 ? '' : (cells[ni] ?? '').trim() });
+  }
+  return { meta, rows };
+}
+
 /** The saved logs, oldest first: [{ id, name, csv }]. Empty if storage is blocked or corrupt. */
 export function loadLogs() {
   try {
@@ -105,11 +140,34 @@ export function stopLog() {
   return true;
 }
 
-/** Hand the newest saved log to the share sheet (AirDrop, Mail, Files); download it if sharing is unavailable. */
-export async function exportLatestLog() {
+/**
+ * File name for an export, with the places the user typed after the app prefix:
+ *   fuelcost-log-20261126-1043.csv  + From "Genève", To "Lyon"  →  fuelcost-log-Geneve-Lyon-20261126-1043.csv
+ * Accents are dropped and anything other than letters and digits becomes a hyphen; blank fields are left out.
+ * @param {string} name  the saved log's name
+ * @param {{from?: string, to?: string}} [places]
+ */
+export function exportName(name, { from = '', to = '' } = {}) {
+  const clean = (s) => String(s ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
+  const parts = [clean(from), clean(to)].filter(Boolean);
+  if (!parts.length) return name;
+  const prefix = 'fuelcost-log-';
+  return name.startsWith(prefix)
+    ? `${prefix}${parts.join('-')}-${name.slice(prefix.length)}`
+    : `${parts.join('-')}-${name}`;
+}
+
+/**
+ * Hand the newest saved log to the share sheet (AirDrop, Mail, Files); download it if sharing is unavailable.
+ * Call it straight from a tap: sharing needs the user's gesture.
+ * @param {{from?: string, to?: string}} [places]  optional, added to the file name (see exportName)
+ */
+export async function exportLatestLog(places = {}) {
   const last = loadLogs().at(-1);
   if (!last) return;
-  const file = new File([last.csv], last.name, { type: 'text/csv' });
+  const name = exportName(last.name, places);
+  const file = new File([last.csv], name, { type: 'text/csv' });
   try {
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], title: 'VerDrive log' });
@@ -121,7 +179,7 @@ export async function exportLatestLog() {
   const url = URL.createObjectURL(file);
   const link = document.createElement('a');
   link.href = url;
-  link.download = last.name;
+  link.download = name;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }

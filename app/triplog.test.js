@@ -3,7 +3,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   LOG_COLUMNS, logFileName, formatRow, buildCsv, loadLogs, storeLog, hasSavedLogs,
-  startLog, stopLog, logAdd, logActive,
+  startLog, stopLog, logAdd, logActive, parseLog, exportName,
 } from './triplog.js';
 
 // A small fake localStorage; `limit` (characters) makes setItem throw like a full storage.
@@ -170,4 +170,45 @@ test('recording: the log saves itself on a timer, so a crash does not lose the d
     globalThis.setInterval = realSet;
     globalThis.clearInterval = realClear;
   }
+});
+
+test('parseLog: reads back what buildCsv writes (meta, GPS values, notes)', () => {
+  const csv = buildCsv({
+    meta: { vehicle: 'sedan', passengers: 2 },
+    rows: [
+      formatRow({ t_s: -2, v_ms: 1.2, gps_acc_m: 11.5, alt_m: 95.8 }, 'warmup'),
+      formatRow({ t_s: 0, dt_s: 1, v_ms: 10.5, gps_acc_m: 3.4, alt_m: 82, alt_acc_m: 2, f_Lh: 3.1 }),
+      formatRow({ t_s: 5.2 }, 'pause'),
+    ],
+  });
+  const log = parseLog(csv);
+  assert.deepEqual(log.meta, { vehicle: 'sedan', passengers: '2' });
+  assert.deepEqual(log.rows, [
+    { t: -2, v: 1.2, acc: 11.5, alt: 95.8, altAcc: null, note: 'warmup' },
+    { t: 0, v: 10.5, acc: 3.4, alt: 82, altAcc: 2, note: '' },
+    { t: 5.2, v: null, acc: null, alt: null, altAcc: null, note: 'pause' },
+  ]);
+});
+
+test('parseLog: finds columns by name and handles Windows line ends', () => {
+  const log = parseLog('# a=1\r\nnote,v_ms,t_s\r\nx,2.5,1\r\n');
+  assert.deepEqual(log.rows, [{ t: 1, v: 2.5, acc: null, alt: null, altAcc: null, note: 'x' }]);
+});
+
+test('parseLog: not a log gives null', () => {
+  for (const text of ['', 'hello', '# only=meta', 'a,b,c\n1,2,3']) assert.equal(parseLog(text), null);
+});
+
+test('exportName: From and To go after the app prefix; blank fields are left out', () => {
+  const n = 'fuelcost-log-20261126-1043.csv';
+  assert.equal(exportName(n), n);
+  assert.equal(exportName(n, { from: '', to: '  ' }), n);
+  assert.equal(exportName(n, { from: 'Paris', to: 'Lyon' }), 'fuelcost-log-Paris-Lyon-20261126-1043.csv');
+  assert.equal(exportName(n, { to: 'Lyon' }), 'fuelcost-log-Lyon-20261126-1043.csv');
+});
+
+test('exportName: accents dropped, other characters become single hyphens', () => {
+  const n = 'fuelcost-log-20261126-1043.csv';
+  assert.equal(exportName(n, { from: 'Genève', to: "Saint-Jean d'Arves / col" }), 'fuelcost-log-Geneve-Saint-Jean-d-Arves-col-20261126-1043.csv');
+  assert.equal(exportName(n, { from: '../..' }), n);
 });

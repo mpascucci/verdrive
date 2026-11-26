@@ -5,6 +5,7 @@ import {
   consumptionFromCo2, calibrateK, simulateCycle, REAL_WORLD_FACTOR,
 } from './model.js';
 import { WLTC3B_KMH } from './wltc.js';
+import { t } from './i18n.js';
 
 /**
  * Litres of LPG burned per litre of gasoline for the same work: ~1.2 (energy ratio about 32 / 26 MJ/L,
@@ -15,20 +16,20 @@ export const LPG_PER_GASOLINE = 1.2;
 
 /** Accepted range [min, max] and unit for each typed field. Outside it the value is almost surely a typo. */
 export const FIELD_LIMITS = {
-  g:            { min: 500, max: 4000, unit: 'kg',    name: 'G (mass in running order)' },
-  g1:           { min: 425, max: 3925, unit: 'kg',    name: 'G.1 (empty mass)' },
-  maxLaden:     { min: 600, max: 8000, unit: 'kg',    name: 'F.1 or F.2 (maximum laden mass)' },
-  displacement: { min: 400, max: 8500, unit: 'cm³',   name: 'P.1 (engine capacity)' },
-  ratedKw:      { min: 5,   max: 800,  unit: 'kW',    name: 'P.2 (maximum power)' },
-  co2:          { min: 20,  max: 600,  unit: 'g/km',  name: 'V.7 (CO₂)' },
-  average:      { min: 1,   max: 40,   unit: 'L/100 km', name: 'Average consumption' },
+  g:            { min: 500, max: 4000, unit: 'kg',    name: 'field.g' },
+  g1:           { min: 425, max: 3925, unit: 'kg',    name: 'field.g1' },
+  maxLaden:     { min: 600, max: 8000, unit: 'kg',    name: 'field.maxLaden' },
+  displacement: { min: 400, max: 8500, unit: 'cm³',   name: 'field.displacement' },
+  ratedKw:      { min: 5,   max: 800,  unit: 'kW',    name: 'field.ratedKw' },
+  co2:          { min: 20,  max: 600,  unit: 'g/km',  name: 'field.co2' },
+  average:      { min: 1,   max: 40,   unit: 'L/100 km', name: 'field.average' },
 };
 /** Limits for the motorcycle form (scooters and motorcycles): lighter and less powerful than cars. */
 export const MOTO_LIMITS = {
-  g:        { min: 40,  max: 600, unit: 'kg', name: 'G (mass in running order)' },
-  g1:       { min: 40,  max: 600, unit: 'kg', name: 'G.1 (empty mass)' },
-  ratedKw:  { min: 1,   max: 250, unit: 'kW', name: 'P.2 (maximum power)' },
-  maxLaden: { min: 180, max: 900, unit: 'kg', name: 'F.2 (maximum laden mass)' },
+  g:        { min: 40,  max: 600, unit: 'kg', name: 'field.g' },
+  g1:       { min: 40,  max: 600, unit: 'kg', name: 'field.g1' },
+  ratedKw:  { min: 1,   max: 250, unit: 'kW', name: 'field.ratedKw' },
+  maxLaden: { min: 180, max: 900, unit: 'kg', name: 'field.maxLadenMoto' },
 };
 /** The rider (75 kg). For L-category vehicles the mass in running order excludes the driver (Regulation (EU) 168/2013, Art. 5). */
 export const RIDER_MASS = 75;
@@ -36,14 +37,14 @@ export const RIDER_MASS = 75;
 export const PASSENGER_MASS = 65;
 /** Fields that must be typed. G is optional (blank: the vehicle type's typical mass is used) and so is the laden mass (blank: no payload share). */
 export const REQUIRED = ['displacement', 'ratedKw'];
-const F_MISSING = 'No laden mass (F.1 or F.2) given: the WLTP test mass is the vehicle mass + 25 kg, without the payload share.';
-const F_ESTIMATE = (mass) => `G not given: mass with rider estimated from the laden mass (${Math.round(mass)} kg). It is rough and a little high, because the laden mass includes the manufacturer's luggage allowance.`;
+const F_MISSING = () => t('note.fMissing');
+const F_ESTIMATE = (mass) => t('note.fEstimate', { m: Math.round(mass) });
 /** G.1 is the empty mass: G (mass in running order, driver included) minus the conventional 75 kg driver. */
 /** G and G.1 should differ by the 75 kg driver; a few kilograms of rounding are accepted. */
 export const COHERENCE_TOLERANCE = 5;
-const G_AGREE = (mass) => `G and G.1 agree (75 kg apart). Mass ${Math.round(mass)} kg.`;
-const G1_NOTE = (mass) => `Mass from G.1 (empty mass) + 75 kg driver: ${Math.round(mass)} kg.`;
-const G_MISSING = (mass) => `G not given: the typical mass of this vehicle type (${Math.round(mass)} kg) is used.`;
+const G_AGREE = (mass) => t('note.gAgree', { m: Math.round(mass) });
+const G1_NOTE = (mass) => t('note.g1', { m: Math.round(mass) });
+const G_MISSING = (mass) => t('note.gMissing', { m: Math.round(mass) });
 export const BODY_LABELS = { hatchback: 'Hatchback', sedan: 'Sedan', estate: 'Estate', suv: 'SUV', van: 'Van' };
 
 /** Typed text or number to a number; empty, blank or junk gives null. */
@@ -61,12 +62,13 @@ function num(x) {
  */
 export function checkAverage(x) {
   const value = num(x);
-  const { min, max, unit, name } = FIELD_LIMITS.average;
+  const { min, max, unit } = FIELD_LIMITS.average;
+  const name = t(FIELD_LIMITS.average.name);
   if (value === null) {
     const typed = x !== null && x !== undefined && String(x).trim() !== '';
-    return { value: null, error: typed ? `${name} should be a number between ${min} and ${max} ${unit}.` : '' };
+    return { value: null, error: typed ? t('err.numberRange', { name, min, max, unit }) : '' };
   }
-  if (value < min || value > max) return { value, error: `${name} should be between ${min} and ${max} ${unit}.` };
+  if (value < min || value > max) return { value, error: t('err.range', { name, min, max, unit }) };
   return { value, error: '' };
 }
 
@@ -84,10 +86,10 @@ export function averageFromFuel({ litres, km }) {
   const l = num(litres);
   const d = num(km);
   if (l === null || d === null) return { value: null, error: '' };
-  if (!(l > 0) || !(d > 0)) return { value: null, error: 'Both values must be above zero.' };
+  if (!(l > 0) || !(d > 0)) return { value: null, error: t('err.aboveZero') };
   const value = Math.round((l / d) * 10000) / 100;
   const { error } = checkAverage(value);
-  return error ? { value: null, error: `${value} L/100 km looks wrong. ${error}` } : { value, error: '' };
+  return error ? { value: null, error: t('err.avgWrong', { v: value, err: error }) } : { value, error: '' };
 }
 
 /**
@@ -120,23 +122,24 @@ export function checkAdvanced(raw, presetMass = null) {
   };
   const errors = {};
   for (const key of Object.keys(FIELD_LIMITS)) {
-    const { min, max, unit, name } = FIELD_LIMITS[key];
+    const { min, max, unit } = FIELD_LIMITS[key];
+    const name = t(FIELD_LIMITS[key].name);
     const v = values[key];
     if (v === null) {
-      if (REQUIRED.includes(key) || (key === 'g' && presetMass === null && values.g1 === null)) errors[key] = `${name} is needed.`;
+      if (REQUIRED.includes(key) || (key === 'g' && presetMass === null && values.g1 === null)) errors[key] = t('err.needed', { name });
     } else if (v < min || v > max) {
-      errors[key] = `${name} should be between ${min} and ${max} ${unit}.`;
+      errors[key] = t('err.range', { name, min, max, unit });
     }
   }
-  if (!(raw.body in BODY_LABELS)) errors.body = 'Choose a body type.';
+  if (!(raw.body in BODY_LABELS)) errors.body = t('err.body');
   // Both typed: G is G.1 plus the 75 kg driver, so a different gap means a typo in one of them.
   if (!errors.g && !errors.g1 && values.g !== null && values.g1 !== null
       && Math.abs(values.g - values.g1 - RIDER_MASS) > COHERENCE_TOLERANCE) {
-    errors.g1 = `G minus G.1 is ${Math.round(values.g - values.g1)} kg, but the driver is ${RIDER_MASS} kg. Check both values, or leave one blank.`;
+    errors.g1 = t('err.gMinusG1', { d: Math.round(values.g - values.g1), r: RIDER_MASS });
   }
   const gUsed = values.g1 !== null ? values.g1 + RIDER_MASS : (values.g ?? presetMass);
   if (!errors.g && !errors.maxLaden && values.maxLaden !== null && gUsed !== null && values.maxLaden <= gUsed) {
-    errors.maxLaden = 'The maximum laden mass (F.1 or F.2) must be above the vehicle mass.';
+    errors.maxLaden = t('err.laden');
   }
   return { values, errors };
 }
@@ -152,12 +155,13 @@ export function checkMoto(raw, presetMass = null) {
   const values = { g: num(raw.g), g1: num(raw.g1), ratedKw: num(raw.ratedKw), maxLaden: num(raw.maxLaden) };
   const errors = {};
   for (const key of Object.keys(MOTO_LIMITS)) {
-    const { min, max, unit, name } = MOTO_LIMITS[key];
+    const { min, max, unit } = MOTO_LIMITS[key];
+    const name = t(MOTO_LIMITS[key].name);
     if (values[key] === null) {
       // P.2 is needed. G is needed only if there is neither a laden mass nor a preset mass; the laden mass is optional.
-      if (key === 'ratedKw' || (key === 'g' && values.g1 === null && values.maxLaden === null && presetMass === null)) errors[key] = `${name} is needed.`;
+      if (key === 'ratedKw' || (key === 'g' && values.g1 === null && values.maxLaden === null && presetMass === null)) errors[key] = t('err.needed', { name });
     }
-    else if (values[key] < min || values[key] > max) errors[key] = `${name} should be between ${min} and ${max} ${unit}.`;
+    else if (values[key] < min || values[key] > max) errors[key] = t('err.range', { name, min, max, unit });
   }
   return { values, errors };
 }
@@ -199,10 +203,10 @@ export function buildAdvancedMoto({ raw, preset, tier1K, average = null, presetM
   const car = { m, cdA: preset.cdA, f0: preset.f0, pMax };
   let k = tier1K;
   let kSource = 'tier1';
-  let note = 'Enter your average consumption (Calc button in the car settings) to tune the fuel use to your bike.';
+  let note = t('note.motoAverage');
   if (average !== null) {
     const solved = kFromAverage({ average, ...car });
-    if (solved === null) note = 'The average is too low for this idle rate: k keeps its Quick value.';
+    if (solved === null) note = t('note.motoLow');
     else { k = solved; kSource = 'average'; note = ''; }
   }
   return {
@@ -255,7 +259,7 @@ export function buildAdvanced({ raw, fuel, tier1K, average = null, presetMass = 
   }
 
   let k = tier1K;
-  let note = target === null ? 'No consumption figure given: the fuel constant k keeps its Quick value.' : '';
+  let note = target === null ? t('note.noFigure') : '';
   if (target !== null) {
     const solved = calibrateK({
       target, speeds: WLTC3B_KMH,
@@ -263,17 +267,17 @@ export function buildAdvanced({ raw, fuel, tier1K, average = null, presetMass = 
     });
     if (solved === null) {
       kSource = 'tier1';
-      note = 'The consumption figure is too low for this idle rate: k keeps its Quick value. Check P.1, V.7 and your average.';
+      note = t('note.tooLow');
     } else {
       k = solved;
-      if (k < 0.15 || k > 0.8) note = 'The calibrated k is unusual. Check the figures against the certificate.';
+      if (k < 0.15 || k > 0.8) note = t('note.unusualK');
     }
   }
 
   return {
     profile: {
       m: g, cdA, f0, pMax, k, kSource, startStop: values.startStop,
-      official, testMass: mTest, category, note: [gGiven ? (values.g1 !== null ? (values.g !== null ? G_AGREE(g) : G1_NOTE(g)) : '') : G_MISSING(g), values.maxLaden === null ? F_MISSING : '', note].filter(Boolean).join(' '),
+      official, testMass: mTest, category, note: [gGiven ? (values.g1 !== null ? (values.g !== null ? G_AGREE(g) : G1_NOTE(g)) : '') : G_MISSING(g), values.maxLaden === null ? F_MISSING() : '', note].filter(Boolean).join(' '),
     },
   };
 }

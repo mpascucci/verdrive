@@ -8,10 +8,26 @@
 //   alt       altitude (m) or null;  altAcc  its accuracy (m) or null
 // Latitude and longitude are used here to derive a speed when needed and are never passed on,
 // so no position leaves this file (and none can end up in the trip log).
-// The two pure functions below are tested in gps.test.js.
+// The pure functions below are tested in gps.test.js.
 
 const EARTH_RADIUS = 6371000; // m
 const WATCH_OPTIONS = { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 };
+
+/**
+ * Signal bars (0–5) for a horizontal accuracy, as on the trip screen's GPS bar.
+ * 5: ≤ 3 m, 4: ≤ 5 m (GOOD_ACCURACY, live display), 3: < 10 m, 2: < 20 m, 1: < 30 m, 0: worse or none.
+ * @param {number|null|undefined} accuracy  metres
+ * @returns {number}
+ */
+export function signalBars(accuracy) {
+  if (accuracy == null || !(accuracy >= 0)) return 0;
+  if (accuracy <= 3) return 5;
+  if (accuracy <= 5) return 4;
+  if (accuracy < 10) return 3;
+  if (accuracy < 20) return 2;
+  if (accuracy < 30) return 1;
+  return 0;
+}
 
 let watchId = null;
 let lastFix = null; // previous position { lat, lon, t }, used when the device gives no speed

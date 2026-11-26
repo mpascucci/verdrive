@@ -18,69 +18,78 @@
 
   <!-- 1. Car settings (first run, and reachable from trip setup) -->
   <main id="screen-settings" class="screen" hidden>
-    <h1>Your vehicle</h1>
-    <p class="lede">Three answers give a rough estimate. You can refine it later.</p>
+    <h1 data-i18n="set.title">Your vehicle</h1>
 
     <form id="settings-form">
-      <fieldset>
-        <legend>Vehicle type</legend>
-        <div class="choices four">
-          <label><input type="radio" name="vehicle" value="city" required><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M7 17V8L9 6H24.5L29 11L41 12.5V17M7 17h4M17 17h14M37 17h4"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg>City car</span></label>
-          <label><input type="radio" name="vehicle" value="sedan"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M4 17V13L12 11.5L17 7H27L33 11.5L44 13V17M4 17h7M17 17h14M37 17h7"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg>Sedan</span></label>
-          <label><input type="radio" name="vehicle" value="suv"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M4 17V8L8 5H28L36 10.5L44 12V17M4 17h7M17 17h14M37 17h7"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg>SUV</span></label>
-          <label><input type="radio" name="vehicle" value="van"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M4 17V5H30L44 12V17M30 5V12H44M4 17h7M17 17h14M37 17h7"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg>Van</span></label>
-          <label><input type="radio" name="vehicle" value="scooter"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M36 17L32.5 6M30 5H35M32.2 7C31.5 11.5 30 14 26.5 15H19M19 15C16 15 14.5 13.5 14 11.5C13.7 10 14.5 9 16 9H25M12 17L14 11.5"/><circle cx="12" cy="17" r="3.5"/><circle cx="36" cy="17" r="3.5"/></svg>Scooter</span></label>
-          <label><input type="radio" name="vehicle" value="moto"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M10 17L18 9H28L32 12L36 17M18 9L22 6H25M28 9L34 6H38M17 13H27"/><circle cx="10" cy="17" r="4"/><circle cx="36" cy="17" r="4"/></svg>Motorcycle</span></label>
-        </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Fuel</legend>
-        <div class="choices three">
-          <label><input type="radio" name="fuel" value="gasoline" required><span>Gasoline</span></label>
-          <label><input type="radio" name="fuel" value="diesel"><span>Diesel</span></label>
-          <label><input type="radio" name="fuel" value="lpg"><span>LPG (GPL)</span></label>
-        </div>
-      </fieldset>
-
-      <label class="field">
-        <span>Fuel price (€ per litre)</span>
-        <input id="price" name="price" type="number" inputmode="decimal" min="0.1" max="10" step="0.001" required>
+      <label class="field inline">
+        <span data-i18n="set.language">Language</span>
+        <select name="lang" class="select">
+          <option value="en">English</option>
+          <option value="it">Italiano</option>
+        </select>
       </label>
 
+      <fieldset>
+        <legend data-i18n="set.vehicleType">Vehicle type</legend>
+        <div class="choices three vehicles">
+          <label><input type="radio" name="vehicle" value="city" required><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M7 17V8L9 6H24.5L29 11L41 12.5V17M7 17h4M17 17h14M37 17h4"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg><i data-i18n="veh.city">City car</i></span></label>
+          <label><input type="radio" name="vehicle" value="sedan"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M4 17V13L12 11.5L17 7H27L33 11.5L44 13V17M4 17h7M17 17h14M37 17h7"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg><i data-i18n="veh.sedan">Sedan</i></span></label>
+          <label><input type="radio" name="vehicle" value="suv"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M4 17V8L8 5H28L36 10.5L44 12V17M4 17h7M17 17h14M37 17h7"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg><i data-i18n="veh.suv">SUV</i></span></label>
+          <label><input type="radio" name="vehicle" value="van"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M4 17V5H30L44 12V17M30 5V12H44M4 17h7M17 17h14M37 17h7"/><circle cx="14" cy="17" r="3"/><circle cx="34" cy="17" r="3"/></svg><i data-i18n="veh.van">Van</i></span></label>
+          <label><input type="radio" name="vehicle" value="scooter"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M36 17L32.5 6M30 5H35M32.2 7C31.5 11.5 30 14 26.5 15H19M19 15C16 15 14.5 13.5 14 11.5C13.7 10 14.5 9 16 9H25M12 17L14 11.5"/><circle cx="12" cy="17" r="3.5"/><circle cx="36" cy="17" r="3.5"/></svg><i data-i18n="veh.scooter">Scooter</i></span></label>
+          <label><input type="radio" name="vehicle" value="moto"><span><svg viewBox="0 0 48 24" aria-hidden="true"><path d="M10 17L18 9H28L32 12L36 17M18 9L22 6H25M28 9L34 6H38M17 13H27"/><circle cx="10" cy="17" r="4"/><circle cx="36" cy="17" r="4"/></svg><i data-i18n="veh.moto">Motorcycle</i></span></label>
+        </div>
+      </fieldset>
+
+      <!-- fuel and its price on one row -->
+      <div class="field-row">
+        <label class="field">
+          <span data-i18n="set.fuel">Fuel</span>
+          <select name="fuel" class="select" required>
+            <option value="gasoline" data-i18n="fuel.gasoline">Gasoline</option>
+            <option value="diesel" data-i18n="fuel.diesel">Diesel</option>
+            <option value="lpg" data-i18n="fuel.lpg">LPG (GPL)</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="set.price">Price (€/L)</span>
+          <input id="price" name="price" type="number" inputmode="decimal" min="0.1" max="10" step="0.001" required>
+        </label>
+      </div>
+
       <div class="field" id="average-field">
-        <label for="average"><span>Your average consumption (L/100 km), optional</span></label>
+        <label for="average"><span data-i18n="set.average">Average consumption (L/100 km), optional</span></label>
         <div class="input-row">
           <input id="average" name="average" type="number" inputmode="decimal" min="1" max="40" step="any">
-          <button type="button" id="calc-open" class="ghost">Calc</button>
+          <button type="button" id="calc-open" class="ghost" data-i18n="set.calc">Calc</button>
         </div>
-        <small>If you know your real average (from a fill-up, the dashboard or past rides), enter it and the app adjusts to it. Calc works it out from fuel and distance.</small>
         <small class="err" id="average-err"></small>
       </div>
 
-      <button type="submit" class="primary">Save</button>
-      <button type="button" id="open-advanced" class="ghost">Advanced settings (registration certificate)</button>
-      <button type="button" id="settings-cancel" class="ghost" hidden>Cancel</button>
+      <button type="submit" class="primary" data-i18n="set.save">Save</button>
+      <button type="button" id="open-advanced" class="ghost two-lines" data-i18n="set.openAdvanced">Advanced settings
+(registration certificate)</button>
+      <button type="button" id="settings-cancel" class="ghost" hidden data-i18n="common.cancel">Cancel</button>
     </form>
   </main>
 
   <!-- 1b. Advanced settings (Tier 2): fields from the registration certificate -->
   <main id="screen-advanced" class="screen" hidden>
-    <h1>Advanced settings</h1>
-    <p class="lede" data-cars>Copy these fields from your registration certificate (cars and vans, petrol, diesel or LPG; not hybrids or electric cars). They replace the rough presets and tune the fuel model to your car.</p>
-    <p class="lede" data-moto hidden>Copy these fields from your registration certificate. The rider (75 kg) is added automatically. The fuel use itself is tuned by your average consumption (Calc button in the car settings).</p>
+    <h1 data-i18n="adv.title">Advanced settings</h1>
+    <p class="lede" data-cars data-i18n="adv.ledeCars">Copy these fields from your registration certificate (cars and vans, petrol, diesel or LPG; not hybrids or electric cars). They replace the rough presets and tune the fuel model to your car.</p>
+    <p class="lede" data-moto hidden data-i18n="adv.ledeMoto">Copy these fields from your registration certificate. The rider (75 kg) is added automatically. The fuel use itself is tuned by your average consumption (Calc button in the car settings).</p>
 
     <form id="advanced-form" novalidate>
       <label class="field">
-        <span>G: mass in running order (kg), optional</span>
+        <span data-i18n="adv.g">G: mass in running order (kg), optional</span>
         <input name="g" type="number" inputmode="decimal" min="40" max="4000" step="any">
-        <small>Used only if G.1 is blank. If both are blank, the typical mass of your vehicle type is used.</small>
+        <small data-i18n="adv.gHint">Used only if G.1 is blank. If both are blank, the typical mass of your vehicle type is used.</small>
         <small class="err" data-for="g"></small>
       </label>
       <label class="field">
-        <span>G.1: empty mass (kg), optional</span>
+        <span data-i18n="adv.g1">G.1: empty mass (kg), optional</span>
         <input name="g1" type="number" inputmode="decimal" min="40" max="3925" step="any">
-        <small>G.1 is G without the driver. It is used first; G is the fallback.</small>
+        <small data-i18n="adv.g1Hint">G.1 is G without the driver. It is used first; G is the fallback.</small>
         <small class="err" data-for="g1"></small>
       </label>
       <label class="field">
@@ -90,171 +99,219 @@
         <small class="err" data-for="maxLaden"></small>
       </label>
       <label class="field" data-cars>
-        <span>P.1: engine capacity (cm³)</span>
+        <span data-i18n="adv.p1">P.1: engine capacity (cm³)</span>
         <input name="displacement" type="number" inputmode="decimal" min="400" max="8500" step="1">
         <small class="err" data-for="displacement"></small>
       </label>
       <label class="field">
-        <span>P.2: maximum power (kW)</span>
+        <span data-i18n="adv.p2">P.2: maximum power (kW)</span>
         <input name="ratedKw" type="number" inputmode="decimal" min="5" max="800" step="0.1">
         <small class="err" data-for="ratedKw"></small>
       </label>
       <label class="field" data-cars>
-        <span>V.7: CO₂ emissions (g/km)</span>
+        <span data-i18n="adv.v7">V.7: CO₂ emissions (g/km)</span>
         <input name="co2" type="number" inputmode="decimal" min="20" max="600" step="0.1">
-        <small>Tunes the fuel use of your car. Leave blank if the certificate has no WLTP value.</small>
+        <small data-i18n="adv.v7Hint">Tunes the fuel use of your car. Leave blank if the certificate has no WLTP value.</small>
         <small class="err" data-for="co2"></small>
       </label>
 
       <fieldset data-cars>
-        <legend>Body type</legend>
+        <legend data-i18n="adv.body">Body type</legend>
         <div class="choices three">
-          <label><input type="radio" name="body" value="hatchback"><span>Hatchback</span></label>
-          <label><input type="radio" name="body" value="sedan"><span>Sedan</span></label>
-          <label><input type="radio" name="body" value="estate"><span>Estate</span></label>
-          <label><input type="radio" name="body" value="suv"><span>SUV</span></label>
-          <label><input type="radio" name="body" value="van"><span>Van</span></label>
+          <label><input type="radio" name="body" value="hatchback"><span data-i18n="body.hatchback">Hatchback</span></label>
+          <label><input type="radio" name="body" value="sedan"><span data-i18n="body.sedan">Sedan</span></label>
+          <label><input type="radio" name="body" value="estate"><span data-i18n="body.estate">Estate</span></label>
+          <label><input type="radio" name="body" value="suv"><span data-i18n="body.suv">SUV</span></label>
+          <label><input type="radio" name="body" value="van"><span data-i18n="body.van">Van</span></label>
         </div>
         <small class="err" data-for="body"></small>
       </fieldset>
 
       <div class="rows" data-cars style="margin-bottom:1.25rem">
         <label class="row-item switch">
-          <div><strong>Start-stop</strong><small>The engine switches off when the car stops.</small></div>
+          <div><strong data-i18n="adv.startStop">Start-stop</strong><small data-i18n="adv.startStopHint">The engine switches off when the car stops.</small></div>
           <input type="checkbox" name="startStop" role="switch">
         </label>
       </div>
 
       <p id="advanced-result" class="result" hidden></p>
 
-      <button type="submit" class="primary">Save advanced settings</button>
-      <button type="button" id="advanced-remove" class="ghost" hidden>Go back to quick settings</button>
-      <button type="button" id="advanced-cancel" class="ghost">Cancel</button>
+      <button type="submit" class="primary" data-i18n="adv.save">Save advanced settings</button>
+      <button type="button" id="advanced-remove" class="ghost" hidden data-i18n="adv.remove">Go back to quick settings</button>
+      <button type="button" id="advanced-cancel" class="ghost" data-i18n="common.cancel">Cancel</button>
     </form>
   </main>
 
   <!-- Calculator for the average consumption: litres used and kilometres covered -->
+  <dialog id="export-dialog">
+    <form id="export-form" novalidate>
+      <h2 data-i18n="exp.title">Export last trip</h2>
+      <label class="field">
+        <span data-i18n="exp.from">From</span>
+        <input id="export-from" type="text" autocomplete="off" autocapitalize="words" maxlength="40">
+      </label>
+      <label class="field">
+        <span data-i18n="exp.to">To</span>
+        <input id="export-to" type="text" autocomplete="off" autocapitalize="words" maxlength="40">
+      </label>
+      <p class="note" data-i18n="exp.note">Optional: added to the file name.</p>
+      <button type="submit" class="primary" data-i18n="exp.export">Export</button>
+      <button type="button" id="export-cancel" class="ghost" data-i18n="common.cancel">Cancel</button>
+    </form>
+  </dialog>
+
   <dialog id="calc-dialog">
     <form id="calc-form" novalidate>
-      <h2>Average consumption</h2>
+      <h2 data-i18n="calc.title">Average consumption</h2>
       <label class="field">
-        <span>Fuel used (litres)</span>
+        <span data-i18n="calc.litres">Fuel used (litres)</span>
         <input id="calc-litres" type="number" inputmode="decimal" min="0" step="any">
       </label>
       <label class="field">
-        <span>Distance covered (km)</span>
+        <span data-i18n="calc.km">Distance covered (km)</span>
         <input id="calc-km" type="number" inputmode="decimal" min="0" step="any">
       </label>
-      <p id="calc-result" class="result" role="status">Enter both values.</p>
-      <button type="submit" id="calc-use" class="primary" disabled>Use this value</button>
-      <button type="button" id="calc-cancel" class="ghost">Cancel</button>
+      <p id="calc-result" class="result" role="status"></p>
+      <button type="submit" id="calc-use" class="primary" disabled data-i18n="calc.use">Use this value</button>
+      <button type="button" id="calc-cancel" class="ghost" data-i18n="common.cancel">Cancel</button>
     </form>
   </dialog>
 
   <!-- 2. Trip setup (every start) -->
   <main id="screen-setup" class="screen" hidden>
     <header class="row">
-      <h1>New trip</h1>
-      <button type="button" id="open-settings" class="ghost small">Settings</button>
+      <h1 data-i18n="setup.title">New trip</h1>
+      <button type="button" id="open-settings" class="ghost small with-icon settings-button"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span data-i18n="setup.settings">Settings</span></button>
     </header>
     <p id="recap" class="recap"></p>
-    <div id="vehicle-switch" class="choices auto" role="radiogroup" aria-label="Vehicle" hidden></div>
+    <div id="vehicle-switch" class="choices auto" role="radiogroup" aria-label="Vehicle" data-i18n-aria="setup.vehicle" hidden></div>
 
     <div class="rows">
+      <!-- fuel and price of the active vehicle, saved as soon as they change; two-wheelers: gasoline only -->
+      <div class="row-item fuel-row">
+        <strong class="with-row-icon"><svg class="row-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M3 21h12"/><path d="M4 10h10"/><path d="M14 8h2a2 2 0 0 1 2 2v6a1.5 1.5 0 0 0 3 0V8.5L18 5"/></svg><span class="fuel-label" data-i18n="setup.fuel">Fuel</span></strong>
+        <select id="setup-fuel" class="fuel-select" aria-label="Fuel type" data-i18n-aria="setup.fuelType">
+          <option value="gasoline" data-i18n="fuel.gasoline">Gasoline</option>
+          <option value="diesel" data-i18n="fuel.diesel">Diesel</option>
+          <option value="lpg" data-i18n="fuel.lpgShort">LPG</option>
+        </select>
+        <label class="price-wrap">
+          <input id="setup-price" class="price-input" type="number" inputmode="decimal" min="0.1" max="10" step="0.001" aria-label="Fuel price, euros per litre" data-i18n-aria="setup.priceAria">
+          <span>€/L</span>
+        </label>
+      </div>
+
       <div class="row-item">
-        <div>
-          <strong id="pax-label">People in the car</strong>
-          <small>Each extra person adds 75 kg.</small>
+        <div class="with-row-icon">
+          <svg class="row-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M16 14.2c2.9 0 5 2.4 5 5.3"/></svg>
+          <div>
+            <strong id="pax-label">People</strong>
+            <small data-i18n="setup.peopleHint">+75 kg each</small>
+          </div>
         </div>
         <div class="stepper">
-          <button type="button" id="pax-minus" aria-label="Fewer people">−</button>
+          <button type="button" id="pax-minus" aria-label="Fewer people" data-i18n-aria="setup.fewer">−</button>
           <output id="pax" aria-live="polite">1</output>
-          <button type="button" id="pax-plus" aria-label="More people">+</button>
+          <button type="button" id="pax-plus" aria-label="More people" data-i18n-aria="setup.more">+</button>
         </div>
       </div>
 
-      <label class="row-item switch">
-        <div><strong>Air conditioning</strong><small>Adds its load to the engine.</small></div>
-        <input type="checkbox" id="setup-ac" role="switch">
-      </label>
-
       <label class="row-item switch" hidden>
-        <div><strong>Cold start</strong><small>Engine not yet warm. Recorded now, applied in a later version.</small></div>
+        <div><strong data-i18n="setup.cold">Cold start</strong><small data-i18n="setup.coldHint">Engine not yet warm. Recorded now, applied in a later version.</small></div>
         <input type="checkbox" id="setup-cold" role="switch" checked>
       </label>
 
-      <label class="row-item switch">
-        <div><strong>Record log</strong><small>Saves speed, altitude and power figures on this phone, never your position. Export it after the trip.</small></div>
-        <input type="checkbox" id="setup-log" role="switch" checked>
-      </label>
     </div>
 
-    <p id="gps-ready" class="gps-ready" role="status" data-state="wait">Waiting for GPS…</p>
-    <button type="button" id="start" class="primary big">Start trip</button>
-    <p class="note">Your browser asks once to use your location. The GPS starts on this screen so it can settle before you drive.</p>
-    <button type="button" id="demo" class="ghost">Try a demo drive</button>
-    <button type="button" id="export-last" class="ghost" hidden>Export last log</button>
+    <p id="gps-ready" class="gps-ready" role="status" data-state="wait">…</p>
+    <div class="button-row start-row">
+      <button type="button" id="demo" class="ghost" data-i18n="setup.demo">Demo drive</button>
+      <button type="button" id="start" class="primary big" data-i18n="setup.start">Start trip</button>
+    </div>
+    <!-- Replay trip: pick an exported log; it runs through the model with this vehicle's settings, then shows the summary -->
+    <div class="button-row">
+      <button type="button" id="replay" class="ghost with-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/><path d="M10 9l5 3-5 3z"/></svg><span data-i18n="setup.replay">Replay trip</span></button>
+      <button type="button" id="export-last" class="ghost with-icon" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg><span data-i18n="setup.export">Export last trip</span></button>
+    </div>
+    <input type="file" id="replay-file" accept=".csv,text/csv" hidden>
+    <p id="replay-err" class="note err" role="alert" hidden></p>
+    <!-- the running version: hidden; a triple tap on the page background shows it -->
+    <p id="version" class="version" hidden></p>
   </main>
 
   <!-- 3. Trip -->
   <main id="screen-trip" class="screen trip" hidden>
-    <p id="status" class="status" role="status"></p>
-
-    <section class="reading" aria-live="off">
-      <div id="value" class="value" data-band="none">—</div>
-      <div id="unit" class="unit">€/h</div>
-    </section>
+    <div id="status-bar" class="status-bar">
+      <span id="gps-bars" class="gps-bars" role="img" aria-label="GPS signal: none" data-bars="0"><i></i><i></i><i></i><i></i><i></i></span>
+      <p id="status" class="status" role="status"></p>
+    </div>
 
     <section class="scale">
-      <p class="avg-line"><span id="avg-value">–</span> €/h trip average</p>
-      <div class="track" aria-hidden="true">
-        <i id="avg-mark" class="mark avg" hidden></i>
-        <i id="now-mark" class="mark now"></i>
-        <span class="tick" id="cruise-tick"></span>
-      </div>
-      <div class="scale-labels" aria-hidden="true">
-        <span>Low</span>
-        <span id="cruise-label">Typical cruise</span>
-        <span>High</span>
-      </div>
+      <!-- dial: centre at 0,0, arc radius 100 from −110° to +90° (0° = up), band above the max to +113°; app.js draws them -->
+      <svg class="gauge" viewBox="-118 -124 236 190" aria-hidden="true">
+        <g id="gauge-arc"></g>
+        <!-- above the maximum: a 20° band, outline only; app.js draws it -->
+        <path id="gauge-over" class="gauge-over"></path>
+        <!-- ticks and figures at 0, 25, 50 (cruise), 75 and 100% of the scale; app.js draws them -->
+        <g id="gauge-scale"></g>
+        <g id="avg-mark" class="dial-mark" hidden><polygon class="tri-avg" points="-4.9,-82.6 4.9,-82.6 0,-91"></polygon></g>
+        <g id="recent-mark" class="dial-mark" hidden><polygon class="tri-recent" points="-4.9,-117.4 4.9,-117.4 0,-109"></polygon></g>
+        <g id="now-mark" class="dial-mark needle"><polygon points="-4.5,10 0,-98 4.5,10"></polygon><circle r="8"></circle></g>
+        <!-- current cost, centred under the pivot; app.js puts the unit just after its right edge -->
+        <g id="dial-value" class="reading" transform="translate(0 56)"></g>
+        <text id="dial-unit" class="reading-unit" x="24" y="56">€/h</text>
+      </svg>
+      <p class="avg-line"><svg class="legend-tri" viewBox="-6 -1 12 10.4" aria-hidden="true"><polygon class="tri-avg" points="-4.9,8.4 4.9,8.4 0,0"></polygon></svg> <span id="avg-value">–</span> <i data-i18n="trip.legendTrip">trip</i> · <svg class="legend-tri" viewBox="-6 -1 12 10.4" aria-hidden="true"><polygon class="tri-recent" points="-4.9,0 4.9,0 0,8.4"></polygon></svg> <span id="recent-value">–</span> <i data-i18n="trip.legendRecent">last 5 min</i> <small>€/h</small></p>
     </section>
 
     <section class="stats">
-      <div class="stat"><div class="pair"><span id="speed">0</span><small>km/h</small></div></div>
-      <div class="stat">
-        <div class="pair"><span id="altitude">–</span><small>m</small></div>
-        <small class="label">altitude</small>
+      <div class="stats-row">
+        <div class="stat"><div class="pair"><span id="speed">0</span><small>km/h</small></div></div>
+        <div class="stat"><div class="pair"><small class="sym">h:</small><span id="altitude">–</span><small>m</small></div></div>
+        <div class="stat"><div class="pair"><span id="grade-value">–</span></div></div>
       </div>
-      <div class="stat">
-        <div class="pair"><span id="trip-cost">0.00</span><small>€</small></div>
-        <small class="label">so far</small>
-      </div>
-      <div class="stat">
-        <div class="pair"><span id="grade-value">–</span></div>
-        <small class="label">slope</small>
+      <div class="stats-row trip-box" role="group" aria-labelledby="trip-box-label">
+        <p id="trip-box-label" class="trip-box-label" data-i18n="trip.box">trip</p>
+        <div class="stat">
+          <div class="pair"><span id="distance">0.0</span><small>km</small></div>
+          <small class="label" data-i18n="trip.distance">distance</small>
+        </div>
+        <button type="button" id="fuel-toggle" class="stat stat-toggle" aria-label="Consumption, tap to switch between L/100 km and km/L" data-i18n-aria="trip.consAria">
+          <div class="pair"><span id="fuel-avg">–</span><small id="fuel-unit">L/100 km</small></div>
+          <small class="label" data-i18n="trip.consumption">consumption</small>
+        </button>
+        <div class="stat">
+          <div class="pair"><span id="trip-cost">0.00</span><small>€</small></div>
+          <small class="label" data-i18n="trip.cost">cost</small>
+        </div>
       </div>
     </section>
 
     <section class="controls">
-      <label class="chip switch-chip">
-        <input type="checkbox" id="trip-ac" role="switch">
-        <span>A/C</span>
-      </label>
-      <button type="button" id="pause" class="chip">Pause</button>
-      <button type="button" id="stop" class="chip stop"><i></i><span>Hold to stop</span></button>
+      <button type="button" id="trip-ac" class="chip ac-toggle" aria-pressed="false" data-i18n="trip.ac">A/C</button>
+      <button type="button" id="pause" class="chip pause" aria-label="Pause">
+        <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="5" height="16" rx="1"></rect><rect x="14" y="4" width="5" height="16" rx="1"></rect></svg>
+        <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"></path></svg>
+      </button>
+      <button type="button" id="stop" class="chip stop"><i></i><span data-i18n="trip.stop">Hold to stop</span></button>
     </section>
   </main>
 
   <!-- 4. Summary -->
   <main id="screen-summary" class="screen" hidden>
-    <h1>Trip summary</h1>
+    <h1 data-i18n="sum.title">Trip summary</h1>
+    <p id="summary-note" class="summary-note" hidden></p>
+    <!-- altitude along the road, coloured like the dial; drawn by drawProfile in app.js -->
+    <figure id="profile" class="profile" hidden>
+      <figcaption data-i18n="sum.profile">Altitude profile</figcaption>
+      <svg id="profile-svg" viewBox="0 0 320 132" role="img" aria-label="Altitude profile"></svg>
+    </figure>
     <dl id="summary" class="summary"></dl>
     <p id="tree-detail" class="tree-detail" hidden></p>
-    <button type="button" id="export-log" class="ghost" hidden>Export log</button>
-    <button type="button" id="done" class="primary big">New trip</button>
+    <button type="button" id="export-log" class="ghost" hidden data-i18n="sum.export">Export log</button>
+    <button type="button" id="done" class="primary big" data-i18n="sum.newTrip">New trip</button>
   </main>
 
-  <footer id="version" class="version"></footer>
 
   <script type="module" src="app.js"></script>
 </body>

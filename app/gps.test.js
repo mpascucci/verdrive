@@ -1,7 +1,7 @@
 // Run with: node --test   (from the project root)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { distanceBetween, speedFromFixes } from './gps.js';
+import { distanceBetween, speedFromFixes, signalBars } from './gps.js';
 
 const near = (a, b, tol) => Math.abs(a - b) <= tol;
 
@@ -39,4 +39,13 @@ test('speedFromFixes: no time passed, or time going backwards, gives null', () =
 
 test('speedFromFixes: standing still gives 0 m/s', () => {
   assert.equal(speedFromFixes({ lat: 45, lon: 7, t: 0 }, { lat: 45, lon: 7, t: 2000 }), 0);
+});
+
+test('signalBars: 5 at ≤ 3 m, 4 at ≤ 5 m, then < 10, < 20, < 30 m', () => {
+  const cases = [[1, 5], [3, 5], [3.1, 4], [5, 4], [5.1, 3], [9.9, 3], [10, 2], [19.9, 2], [20, 1], [29.9, 1], [30, 0], [206, 0]];
+  for (const [acc, bars] of cases) assert.equal(signalBars(acc), bars, `${acc} m`);
+});
+
+test('signalBars: no accuracy gives no bars', () => {
+  for (const acc of [null, undefined, NaN, -1]) assert.equal(signalBars(acc), 0);
 });

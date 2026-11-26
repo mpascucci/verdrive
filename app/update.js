@@ -8,7 +8,7 @@
 // buildId is pure and tested in update.test.js.
 
 // The files that make up the app. A change in any of them is a new version.
-const WATCHED = ['index.html', 'style.css', 'app.js', 'model.js', 'gps.js', 'triplog.js', 'update.js', 'profile.js', 'wltc.js', 'vehicles.js'];
+const WATCHED = ['index.html', 'style.css', 'app.js', 'model.js', 'gps.js', 'triplog.js', 'update.js', 'profile.js', 'wltc.js', 'vehicles.js', 'elevation.js', 'i18n.js', 'segments.js'];
 const CHECK_EVERY = 30 * 60 * 1000; // ms
 
 let isBusy = () => false;
