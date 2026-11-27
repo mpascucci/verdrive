@@ -1,5 +1,7 @@
 # VerDrive
 
+Drive aware of fuel consumption, and eco-friendly!
+
 A phone app that shows what **your trip costs right now**, in €/h km while you drive. It reads your speed and altitude from the phone's GPS and runs a simple physics model of your vehicle: how much power it needs, and how much fuel that power burns.
 
 <p align="center"><a href="https://mpascucci.github.io/verdrive/app/"><img src="https://img.shields.io/badge/OPEN_THE_APP-1f6feb?style=for-the-badge" alt="Open the app" height="40"></a></p>
