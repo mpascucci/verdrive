@@ -33,6 +33,10 @@ node --test                     # all tests, from the project root
 
 The WLTC speed table in `app/wltc.js` is data from Commission Regulation (EU) 2017/1151, Annex XXI, checked against the regulation's own checksums.
 
+## AI disclaimer
+
+This project was built with the help of AI coding tools (Claude Code). The code has been tested by the author, but it comes with no warranty; see the license below.
+
 ## License
 
 [PolyForm Noncommercial License 1.0.0](LICENSE). This is **source-available, not open source**: you may use, change and share the software for any noncommercial purpose (personal use, hobby, study, charities, schools, public research, government). Commercial use needs the author's separate permission.
