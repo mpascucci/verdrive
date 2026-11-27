@@ -2,6 +2,8 @@
 
 A phone app that shows what **your trip costs right now**, in €/h km while you drive. It reads your speed and altitude from the phone's GPS and runs a simple physics model of your vehicle: how much power it needs, and how much fuel that power burns.
 
+<p align="center"><a href="https://mpascucci.github.io/verdrive/app/"><img src="https://img.shields.io/badge/OPEN_THE_APP-1f6feb?style=for-the-badge" alt="Open the app" height="40"></a></p>
+
 <p align="center"><a href="screenshots/trip-landscape.png"><img src="screenshots/trip-landscape.png" alt="VerDrive trip screen in landscape: cost dial in €/h, speed, altitude, slope and trip totals" width="600"></a></p>
 
 <p align="center"><a href="screenshots/trip-summary-landscape.png"><img src="screenshots/trip-summary-landscape.png" alt="Trip summary in landscape: altitude profile coloured by cost, and the trip's figures" width="600"></a></p>
