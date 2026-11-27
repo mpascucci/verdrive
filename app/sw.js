@@ -33,6 +33,7 @@ const PRECACHE = [
   'icons/icon-512.png',
   'icons/icon-maskable-512.png',
   'icons/apple-touch-icon.png',
+  'images/og-image.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -62,8 +63,8 @@ async function networkFirst(request) {
   const navigating = request.mode === 'navigate';
   try {
     const response = await fetchFresh(request.url, navigating);
-    // An expired Cloudflare Access session answers a page load with a redirect to the login page.
-    // Pass that redirect on so the browser shows the login (never cache it). Other requests
+    // A host may answer a page load with a redirect (e.g. to a login page).
+    // Pass that redirect on so the browser follows it (never cache it). Other requests
     // that get redirected fail and fall back to the cache below.
     if (response.type === 'opaqueredirect') return response;
     if (response.ok) cache.put(request, response.clone());

@@ -1,11 +1,6 @@
 # macOS
 .DS_Store
 
-# Wrangler (Cloudflare): local cache and state, and local secrets
-.wrangler/
-.dev.vars
-.dev.vars.*
-
 # Environment files
 .env
 .env.*
@@ -25,9 +20,6 @@ logs/
 .claude/
 plans/
 
-# test deploy
-wrangler.jsonc
-
 # Logs and scratch files
 *.log
 *.tmp
@@ -38,6 +30,3 @@ tools/
 
 # Local dev server and element inspector (pwa-setup skill): never committed
 dev/
-
-# Cloudflare deploy: which files to leave out of the upload (kept local, like wrangler.jsonc)
-app/.assetsignore
