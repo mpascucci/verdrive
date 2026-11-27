@@ -1,8 +1,12 @@
 # VerDrive
 
-A phone app that shows what your trip costs **right now**, in €/100 km while you drive and €/h when you are slow or stopped. It reads your speed and altitude from the phone's GPS and runs a simple physics model of your vehicle: how much power it needs, and how much fuel that power burns.
+A phone app that shows what **your trip costs right now**, in €/h km while you drive. It reads your speed and altitude from the phone's GPS and runs a simple physics model of your vehicle: how much power it needs, and how much fuel that power burns.
 
-It is a Progressive Web App: plain JavaScript, no framework, no build step, no server. It works offline once installed, keeps the screen on during a trip, and stores everything on the phone.
+<p align="center"><a href="screenshots/trip-landscape.png"><img src="screenshots/trip-landscape.png" alt="VerDrive trip screen in landscape: cost dial in €/h, speed, altitude, slope and trip totals" width="600"></a></p>
+
+<a href="screenshots/trip-summary-landscape.png"><img src="screenshots/trip-summary-landscape.png" alt="Trip summary in landscape: altitude profile coloured by cost, and the trip's figures" width="600"></a>
+
+It is plain JavaScript, no framework, no build step, no server. It works offline once installed, keeps the screen on during a trip, and stores everything on the phone.
 
 **Status:** early. The model and the screens work and are tested (`node --test`), and the slope handling works on real drives in town and on the freeway. Estimates are rough: about ±20–30% with the quick settings, better with the advanced ones.
 
@@ -17,19 +21,6 @@ It is a Progressive Web App: plain JavaScript, no framework, no build step, no s
 - Trip summary with CO₂, optional CSV log of a trip (never your position), settings remembered per vehicle.
 
 [`MODEL.md`](MODEL.md) describes how the physics is modeled in the app.
-
-## Run it
-
-```sh
-cd app
-python3 -m http.server 8000     # then open http://localhost:8000
-```
-
-GPS and the screen wake lock need a secure context: `localhost` counts, a phone needs HTTPS. To use it on a phone, host the `app/` folder on any static HTTPS host.
-
-```sh
-node --test                     # all tests, from the project root
-```
 
 The WLTC speed table in `app/wltc.js` is data from Commission Regulation (EU) 2017/1151, Annex XXI, checked against the regulation's own checksums.
 
