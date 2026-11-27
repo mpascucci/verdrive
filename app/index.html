@@ -247,21 +247,35 @@
     </div>
 
     <section class="scale">
+      <!-- unit lights, like a dashboard's warning lights: two in each top corner of the dial; the lit one is the
+           dial's unit, a tap picks it (app.js) -->
+      <div class="lights" role="group" aria-label="Dial unit" data-i18n-aria="trip.dialUnit">
+        <div class="lights-col">
+          <button type="button" class="light" data-unit="h" aria-pressed="false" style="--light: var(--mid)">€/h</button>
+          <button type="button" class="light" data-unit="km" aria-pressed="false" style="--light: var(--mid)">€/100 km</button>
+        </div>
+        <div class="lights-col">
+          <button type="button" class="light" data-unit="co2" aria-pressed="false" style="--light: var(--low)">CO₂</button>
+          <button type="button" class="light" data-unit="speed" aria-pressed="false" style="--light: var(--scale-0)">km/h</button>
+        </div>
+      </div>
       <!-- dial: centre at 0,0, arc radius 100 from −110° to +90° (0° = up), band above the max to +113°; app.js draws them -->
-      <svg class="gauge" viewBox="-118 -124 236 190" aria-hidden="true">
+      <!-- a tap on the dial switches its unit: €/h → €/100 km → kg CO₂/h (app.js) -->
+      <svg id="gauge" class="gauge" viewBox="-118 -124 236 190" role="button" tabindex="0" aria-label="Cost, tap to switch between €/h, €/100 km and kg CO₂/h" data-i18n-aria="trip.costAria">
         <g id="gauge-arc"></g>
         <!-- above the maximum: a 20° band, outline only; app.js draws it -->
         <path id="gauge-over" class="gauge-over"></path>
-        <!-- ticks and figures at 0, 25, 50 (cruise), 75 and 100% of the scale; app.js draws them -->
+        <!-- ticks and figures: quarters of the scale, or set speeds in km/h; app.js draws them (setDialScale) -->
         <g id="gauge-scale"></g>
         <g id="avg-mark" class="dial-mark" hidden><polygon class="tri-avg" points="-4.9,-82.6 4.9,-82.6 0,-91"></polygon></g>
         <g id="recent-mark" class="dial-mark" hidden><polygon class="tri-recent" points="-4.9,-117.4 4.9,-117.4 0,-109"></polygon></g>
-        <g id="now-mark" class="dial-mark needle"><polygon points="-4.5,10 0,-98 4.5,10"></polygon><circle r="8"></circle></g>
         <!-- current cost, centred under the pivot; app.js puts the unit just after its right edge -->
         <g id="dial-value" class="reading" transform="translate(0 56)"></g>
         <text id="dial-unit" class="reading-unit" x="24" y="56">€/h</text>
+        <!-- the needle last, so it is drawn over the figure -->
+        <g id="now-mark" class="dial-mark needle"><polygon points="-4.5,10 0,-98 4.5,10"></polygon><circle r="8"></circle></g>
       </svg>
-      <p class="avg-line"><svg class="legend-tri" viewBox="-6 -1 12 10.4" aria-hidden="true"><polygon class="tri-avg" points="-4.9,8.4 4.9,8.4 0,0"></polygon></svg> <span id="avg-value">–</span> <i data-i18n="trip.legendTrip">trip</i> · <svg class="legend-tri" viewBox="-6 -1 12 10.4" aria-hidden="true"><polygon class="tri-recent" points="-4.9,0 4.9,0 0,8.4"></polygon></svg> <span id="recent-value">–</span> <i data-i18n="trip.legendRecent">last 5 min</i> <small>€/h</small></p>
+      <p class="avg-line"><svg class="legend-tri" viewBox="-6 -1 12 10.4" aria-hidden="true"><polygon class="tri-avg" points="-4.9,8.4 4.9,8.4 0,0"></polygon></svg> <span id="avg-value">–</span> <i data-i18n="trip.legendTrip">trip</i> · <svg class="legend-tri" viewBox="-6 -1 12 10.4" aria-hidden="true"><polygon class="tri-recent" points="-4.9,0 4.9,0 0,8.4"></polygon></svg> <span id="recent-value">–</span> <i data-i18n="trip.legendRecent">last 5 min</i></p>
     </section>
 
     <section class="stats">
@@ -288,7 +302,11 @@
     </section>
 
     <section class="controls">
-      <button type="button" id="trip-ac" class="chip ac-toggle" aria-pressed="false" data-i18n="trip.ac">A/C</button>
+      <button type="button" id="trip-ac" class="chip ac-toggle" aria-pressed="false">
+        <!-- snowflake: three crossing bars with a V at each end -->
+        <svg class="icon-ac" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M3.34 7l17.32 10M3.34 17 20.66 7M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5M3.2 10.4l3.4-.9-.9-3.4M20.8 13.6l-3.4.9.9 3.4M5.7 17.8l.9-3.4-3.4-.9M18.3 6.2l-.9 3.4 3.4.9"></path></svg>
+        <span data-i18n="trip.ac">A/C</span>
+      </button>
       <button type="button" id="pause" class="chip pause" aria-label="Pause">
         <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="5" height="16" rx="1"></rect><rect x="14" y="4" width="5" height="16" rx="1"></rect></svg>
         <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z"></path></svg>

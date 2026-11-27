@@ -244,14 +244,32 @@ dialog button { width: 100%; margin-top: 0.6rem; }
 .gps-bars[data-bars="4"] i:nth-child(-n+4), .gps-bars[data-bars="5"] i { background: var(--bone); }
 
 
-.scale { padding: 0 0.25rem; display: flex; flex-direction: column; align-items: center; }
+.scale { position: relative; padding: 0 0.25rem; display: flex; flex-direction: column; align-items: center; }
+/* unit lights in the dial's top corners, like a dashboard's warning lights: dark when off; the lit one glows in its
+   own colour (--light, set in index.html) */
+.lights { position: absolute; top: 0; left: 0; right: 0; z-index: 1; display: flex; justify-content: space-between; pointer-events: none; }
+.lights-col { display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; pointer-events: auto; }
+.lights-col:last-child { align-items: flex-end; }
+.light {
+  min-height: 0; min-width: 3.3rem; padding: 0.25rem 0.4rem; border: 1px solid var(--line); border-radius: 6px;
+  background: #090c0b; color: color-mix(in oklab, var(--light) 35%, var(--ink));
+  font-size: 0.72rem; font-weight: 700; line-height: 1.1; white-space: nowrap;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.light[aria-pressed="true"] {
+  color: var(--light); border-color: color-mix(in oklab, var(--light) 55%, var(--ink));
+  text-shadow: 0 0 6px color-mix(in oklab, var(--light) 70%, transparent);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--light) 35%, transparent), inset 0 0 8px color-mix(in oklab, var(--light) 25%, transparent);
+}
 .avg-line { align-self: stretch; margin: 0.9rem 0 0; text-align: center; color: var(--dim-hi); }
 /* legend triangles drawn at the dial's own scale, so they match the triangles on the dial:
    the dial is (line width + 1rem) wide, capped at 560px, for 236 SVG units; an icon spans 12 units */
 .legend-tri { display: inline-block; vertical-align: 0.05em; height: auto; width: calc(min(100% + 1rem, 560px) * 12 / 236); overflow: visible; }
 .avg-line span { color: var(--bone); font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 /* the dial reaches into the screen's side padding to be as big as the phone allows; .scale centres it */
-.gauge { display: block; width: calc(100% + 1rem); max-width: 560px; flex: none; overflow: visible; }
+.gauge { display: block; width: calc(100% + 1rem); max-width: 560px; flex: none; overflow: visible; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.gauge:focus { outline: none; }
+.gauge:focus-visible { outline: 3px solid var(--mid); outline-offset: 2px; border-radius: 6px; }
 /* shading: green up to 20% of the sweep (0.4× cruise), amber at the top (cruise), coral from 80% (1.6× cruise); colours set in app.js */
 #gauge-arc path { fill: none; stroke-width: 14; }
 /* beyond the maximum: transparent band with a red outline */
@@ -300,6 +318,9 @@ dialog button { width: 100%; margin-top: 0.6rem; }
 .chip { display: flex; align-items: center; justify-content: center; min-height: 64px; font-size: 1.05rem; }
 /* A/C and Pause: lighter outline than the other buttons */
 .ac-toggle, .pause { border-color: var(--dim-hi); }
+/* A/C: snowflake before the label */
+.ac-toggle { gap: 0.4rem; }
+.icon-ac { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 /* Pause shows a pause icon, and a play icon while paused (data-paused set in app.js) */
 .pause svg { width: 26px; height: 26px; fill: currentColor; }
 .pause .icon-play, .pause[data-paused="true"] .icon-pause { display: none; }

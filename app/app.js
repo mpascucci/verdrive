@@ -12,7 +12,7 @@ import { buildAdvanced, buildAdvancedMoto, simulatedWltp, checkAverage, kFromAve
 import { normalizeStore, settingsFor, activeSettings, saveVehicle, setActive, recentVehicles } from './vehicles.js';
 import { startLog, stopLog, logAdd, logActive, hasSavedLogs, exportLatestLog, parseLog } from './triplog.js';
 import { t, nf, loadLang, saveLang, getLang, applyStatic } from './i18n.js';
-import { segmentPaths } from './segments.js';
+import { segmentPaths, fixedDigits } from './segments.js';
 
 loadLang();
 const vehicleLabel = (id) => t(`veh.${id}`);
@@ -567,7 +567,7 @@ function startTrip({ demo, replay = false }) {
     acLitres: 0,      // fuel attributable to A/C (estimated)
     idleLitres: 0,    // fuel burned while stopped
     ref: null,        // cost at steady cruise (€/h)
-    recent: [{ s: 0, L: 0 }], // running totals (seconds, litres) for the last-5-minutes average
+    recent: [{ s: 0, L: 0, d: 0 }], // running totals (seconds, litres, metres) for the last-5-minutes average
     profile: [],      // { d, h, L, s } per sample, for the altitude profile on the summary
     demoTimer: null,
   };
@@ -591,8 +591,10 @@ function startTrip({ demo, replay = false }) {
   $('trip-cost').textContent = '0.00';
   $('distance').textContent = '0.0';
   renderFuelAverage();
+  dialUnit = 'h'; // every trip starts in €/h
+  renderCostUnit();
   $('avg-mark').toggleAttribute('hidden', true);
-  setDialValue('—');
+  setDialValue(fixedDigits(null));
   $('dial-value').style.removeProperty('--cost-color');
   $('avg-value').textContent = '–';
   $('recent-mark').toggleAttribute('hidden', true);
@@ -724,7 +726,7 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
   trip.litres += dL;
   trip.distance += v * dt;
   trip.seconds += dt;
-  trip.recent.push({ s: trip.seconds, L: trip.litres });
+  trip.recent.push({ s: trip.seconds, L: trip.litres, d: trip.distance });
   // keep one entry at or before the window start, so the window spans the full 5 minutes
   while (trip.recent.length > 1 && trip.recent[1].s <= trip.seconds - RECENT_WINDOW) trip.recent.shift();
   if (trip.altS != null) trip.profile.push({ d: trip.distance, h: trip.altS, L: trip.litres, s: trip.seconds });
@@ -850,11 +852,55 @@ function renderGrade() {
 }
 
 // ----- display -----
+// The dial reads €/h, €/100 km, kg CO₂/h or km/h. A tap on the dial goes to the next of the first three; the four
+// lights in its top corners pick any unit, km/h included. Every trip starts in €/h. Each scale runs 0 to 2× the value at steady
+// cruise (CRUISE_SPEED) in its own unit, so cruise sits at the same place on the dial.
+const PER_KM_MIN_SPEED = 5 / 3.6;  // m/s: slower than this, a per-km figure has no meaning
+const PER_KM_MIN_DIST = 300;       // m: distance the averages need per km (as the fuel average)
+const PER_H_MIN_TIME = 30;         // s: time the averages need per hour
+// for each unit: its label, and how much one litre of fuel is worth in it (€ or kg CO₂)
+const DIAL_UNITS = {
+  h: { label: '€/h', perKm: false, perLitre: () => settings.price },
+  km: { label: '€/100 km', perKm: true, perLitre: () => settings.price },
+  co2: { label: 'kg CO₂/h', perKm: false, perLitre: () => CO2_PER_LITRE[settings.fuel] },
+  speed: { label: 'km/h', speed: true }, // a speedometer: picked with its light only, not in the tap cycle
+};
+const DIAL_CYCLE = ['h', 'km', 'co2'];
+const SPEED_MAX = 140; // km/h at the end of the speedometer's scale (the band above it goes on to 210)
+let dialUnit = 'h';
+
+function renderCostUnit() {
+  $('dial-unit').textContent = DIAL_UNITS[dialUnit].label; // the averages below the dial are in the same unit
+  // the light of the unit on show is lit
+  document.querySelectorAll('.light').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.unit === dialUnit)));
+}
+
+/** `litres` burned over `seconds` and `metres`, in the dial's unit; null if too short to mean anything. */
+function dialValueOf({ litres, seconds, metres, minSeconds = PER_H_MIN_TIME }) {
+  const u = DIAL_UNITS[dialUnit];
+  if (u.speed) return seconds > minSeconds ? (metres / seconds) * 3.6 : null; // average speed
+  const amount = litres * u.perLitre();
+  if (u.perKm) return metres > PER_KM_MIN_DIST ? (amount / metres) * 100000 : null;
+  return seconds > minSeconds ? amount / (seconds / 3600) : null;
+}
+
 function render() {
   const price = settings.price;
-  const cost = toCost({ litres: trip.fS, price }); // €/h
-  const ref = trip.ref;
-  const ratio = cost / ref;
+  const u = DIAL_UNITS[dialUnit];
+  let cost, ref;
+  if (u.speed) {
+    cost = trip.vS * 3.6;
+    ref = SPEED_MAX / 2; // the scale ends at SPEED_MAX (2 × ref), like the others
+  } else {
+    const perHour = trip.fS * u.perLitre(); // € or kg CO₂ per hour (fS is L/h)
+    // cruise value in the dial's unit; trip.ref is €/h at cruise (recomputed when A/C changes)
+    const refPerHour = (trip.ref / price) * u.perLitre();
+    ref = u.perKm ? (refPerHour / (CRUISE_SPEED * 3.6)) * 100 : refPerHour;
+    // now: per 100 km = (per h) / (km/h) × 100; when (almost) stopped, no figure and the pointer at the end of the band
+    const slow = u.perKm && trip.vS < PER_KM_MIN_SPEED;
+    cost = !u.perKm ? perHour : slow ? null : (perHour / (trip.vS * 3.6)) * 100;
+  }
+  const ratio = cost == null ? Infinity : cost / ref;
 
   $('speed').textContent = Math.round(trip.vS * 3.6);
   $('trip-cost').textContent = nf(toCost({ litres: trip.litres, price }), 2);
@@ -863,24 +909,40 @@ function render() {
   renderGrade();
   $('altitude').textContent = trip.altS == null ? '–' : Math.round(trip.altS);
 
-  // scale runs 0 to 2x the cruising cost, so cruise sits at 50%, straight up
+  // scale runs 0 to 2x the cruising cost, so cruise sits at 50%, near the top
   $('now-mark').style.transform = dialRotation(ratio / 2);
-  setDialValue(nf(cost, 1));
+  setDialValue(fixedDigits(cost)); // fixed 888.8 layout; the point is the same in both languages
   $('dial-value').style.setProperty('--cost-color', costColor(Math.min(1, ratio / 2)));
   setDialScale(ref);
 
-  // trip average (€/h over the trip time, pauses excluded): above the bar and as a marker (needs 30 s)
-  const avg = trip.seconds > 30 ? toCost({ litres: trip.litres, price }) / (trip.seconds / 3600) : null;
+  // trip average (pauses excluded): above the bar and as a marker (needs 30 s, or 300 m per km)
+  const avg = dialValueOf({ litres: trip.litres, seconds: trip.seconds, metres: trip.distance });
   $('avg-value').textContent = avg == null ? '–' : nf(avg, 1);
   placeMark('avg-mark', avg, ref);
 
   // last 5 minutes of trip time (pauses excluded); until then the same as the trip average
   const base = trip.recent[0];
-  const span = trip.seconds - base.s;
-  const recent = trip.seconds > 30 ? toCost({ litres: trip.litres - base.L, price }) / (span / 3600) : null;
+  const recent = trip.seconds > 30
+    ? dialValueOf({ litres: trip.litres - base.L, seconds: trip.seconds - base.s, metres: trip.distance - base.d, minSeconds: 0 })
+    : null;
   $('recent-value').textContent = recent == null ? '–' : nf(recent, 1);
   placeMark('recent-mark', recent, ref);
 }
+
+function setDialUnit(unit) {
+  dialUnit = unit;
+  renderCostUnit();
+  if (trip?.hasData) render();
+}
+// €/h → €/100 km → kg CO₂/h → €/h; from km/h, back to €/h
+function toggleCostUnit() {
+  setDialUnit(DIAL_CYCLE[(DIAL_CYCLE.indexOf(dialUnit) + 1) % DIAL_CYCLE.length]);
+}
+$('gauge').addEventListener('click', toggleCostUnit);
+document.querySelectorAll('.light').forEach((b) => b.addEventListener('click', () => setDialUnit(b.dataset.unit)));
+$('gauge').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCostUnit(); }
+});
 
 // Fuel average over the trip, in L/100 km or km/L (tap to switch; needs 300 m to mean anything)
 const FUEL_UNIT_KEY = 'fuelprice.fuelUnit';
@@ -993,11 +1055,21 @@ function drawDialOver() {
 }
 drawDialOver();
 
-// Ticks and figures at every quarter of the scale: 0, ½, 1 (cruise, top), 1½ and 2× the cruising cost.
+// Ticks and figures: for the cost and CO₂ units at every quarter of the scale (0, ½, 1 = cruise at the top,
+// 1½ and 2× the cruising value); for km/h at the speeds people drive at (SPEED_TICKS).
 const DIAL_STEPS = [0, 0.25, 0.5, 0.75, 1];
-function drawDialScale() {
+const SPEED_TICKS = [0, 30, 50, 90, 110, 130]; // km/h
+let dialScaleKey = null;
+function setDialScale(ref) {
+  const speed = DIAL_UNITS[dialUnit].speed;
+  const key = speed ? 'speed' : ref;
+  if (key === dialScaleKey) return;
+  dialScaleKey = key;
+  const steps = speed
+    ? SPEED_TICKS.map((v) => ({ pos: v / SPEED_MAX, text: String(v), cruise: false }))
+    : DIAL_STEPS.map((pos) => ({ pos, text: String(Math.round(pos * 2 * ref)), cruise: pos === 0.5 })); // whole units
   const svg = 'http://www.w3.org/2000/svg';
-  for (const pos of DIAL_STEPS) {
+  $('gauge-scale').replaceChildren(...steps.flatMap(({ pos, text, cruise }) => {
     const a = ((DIAL_START + pos * DIAL_SWEEP) * Math.PI) / 180;
     const at = (r) => [(r * Math.sin(a)).toFixed(2), (-r * Math.cos(a)).toFixed(2)];
     const tick = document.createElementNS(svg, 'line');
@@ -1005,18 +1077,10 @@ function drawDialScale() {
     Object.entries({ x1, y1, x2, y2, class: 'tick' }).forEach(([k, v]) => tick.setAttribute(k, v));
     const label = document.createElementNS(svg, 'text');
     const [x, y] = at(DIAL_R - 28);
-    Object.entries({ x, y, class: pos === 0.5 ? 'step cruise' : 'step' }).forEach(([k, v]) => label.setAttribute(k, v));
-    $('gauge-scale').append(tick, label);
-  }
-}
-drawDialScale();
-
-let dialScaleRef = null;
-function setDialScale(ref) {
-  if (ref === dialScaleRef) return;
-  dialScaleRef = ref;
-  const labels = $('gauge-scale').querySelectorAll('text');
-  DIAL_STEPS.forEach((pos, i) => { labels[i].textContent = String(Math.round(pos * 2 * ref)); }); // whole euros
+    Object.entries({ x, y, class: cruise ? 'step cruise' : 'step' }).forEach(([k, v]) => label.setAttribute(k, v));
+    label.textContent = text;
+    return [tick, label];
+  }));
 }
 
 // ----- controls -----

@@ -11,12 +11,13 @@
 
 const SEGMENTS = {
   0: 'abcdef', 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc', 5: 'afgcd', 6: 'afgedc', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg',
-  '-': 'g', '—': 'g', '–': 'g',
+  '-': 'g', '—': 'g', '–': 'g', ' ': '', // a space is a digit with every segment unlit
 };
 
 /**
- * Path data for a string of digits, '.', ',' and dashes, its baseline at y = 0, starting at x = 0.
- * Each character gives all seven segments, lit or not; '.' and ',' give a decimal point (lit).
+ * Path data for a string of digits, spaces, '.', ',', '_' and dashes, its baseline at y = 0, starting at x = 0.
+ * Each character gives all seven segments, lit or not (a space: none lit); '.' and ',' give a decimal point (lit),
+ * '_' an unlit one (the point's place kept).
  * Characters it cannot draw are skipped.
  *
  * @param {string} text
@@ -42,10 +43,10 @@ export function segmentPaths(text, { w = 20, h = 36, t = 4.4, gap = 4.5, slant =
 
   let x = 0;
   for (const ch of String(text)) {
-    if (ch === '.' || ch === ',') {
+    if (ch === '.' || ch === ',' || ch === '_') {
       const s = t * 1.1;
       x -= gap / 2;
-      segments.push({ d: `M${[[x, -s], [x + s, -s], [x + s, 0], [x, 0]].map(([a, b]) => pt(a, b)).join('L')}Z`, on: true });
+      segments.push({ d: `M${[[x, -s], [x + s, -s], [x + s, 0], [x, 0]].map(([a, b]) => pt(a, b)).join('L')}Z`, on: ch !== '_' });
       x += s + gap;
       continue;
     }
@@ -62,4 +63,19 @@ export function segmentPaths(text, { w = 20, h = 36, t = 4.4, gap = 4.5, slant =
     x += w + gap;
   }
   return { segments, width: Math.max(0, x - gap) };
+}
+
+/**
+ * A value laid out for a fixed "888.8" display (four digits and a point), so the figure never changes width:
+ * 8.5 → "  8.5" (leading digits unlit), 35.8 → " 35.8", 123.4 → "123.4", 1234 → "123_4" (whole number, point
+ * unlit), capped at 9999; no value (null, NaN, infinite or negative) → "---_-".
+ *
+ * @param {number|null} value
+ * @returns {string} for segmentPaths
+ */
+export function fixedDigits(value) {
+  if (value == null || !Number.isFinite(value) || value < 0) return '---_-';
+  if (value < 999.95) return value.toFixed(1).padStart(5, ' ');
+  const n = String(Math.min(9999, Math.round(value)));
+  return `${n.slice(0, 3)}_${n.slice(3)}`;
 }
