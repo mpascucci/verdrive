@@ -4,7 +4,7 @@ A phone app that shows what **your trip costs right now**, in €/h km while you
 
 <p align="center"><a href="screenshots/trip-landscape.png"><img src="screenshots/trip-landscape.png" alt="VerDrive trip screen in landscape: cost dial in €/h, speed, altitude, slope and trip totals" width="600"></a></p>
 
-<a href="screenshots/trip-summary-landscape.png"><img src="screenshots/trip-summary-landscape.png" alt="Trip summary in landscape: altitude profile coloured by cost, and the trip's figures" width="600"></a>
+<p align="center"><a href="screenshots/trip-summary-landscape.png"><img src="screenshots/trip-summary-landscape.png" alt="Trip summary in landscape: altitude profile coloured by cost, and the trip's figures" width="600"></a></p>
 
 It is plain JavaScript, no framework, no build step, no server. It works offline once installed, keeps the screen on during a trip, and stores everything on the phone.
 
