@@ -1,7 +1,7 @@
 // Run with: node --test   (from the project root)
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { t, nf, setLang, getLang, initialLang, missingKeys, LANGS } from './i18n.js';
+import { t, nf, setLang, getLang, initialLang, missingKeys, LANGS, parseDecimal, numText } from './i18n.js';
 import { checkAverage } from './profile.js';
 
 afterEach(() => setLang('en'));
@@ -45,4 +45,30 @@ test('setLang ignores unknown languages; model messages follow the language', ()
   assert.equal(getLang(), 'en');
   setLang('it');
   assert.match(checkAverage(80).error, /^Consumo medio: deve essere tra 1 e 40 L\/100 km\.$/);
+});
+
+test('parseDecimal: "." and "," both work in any language; two separators, signs, letters are NaN; blank is null', () => {
+  for (const lang of ['en', 'it']) {
+    setLang(lang);
+    assert.equal(parseDecimal('0.62'), 0.62);
+    assert.equal(parseDecimal('0,62'), 0.62);
+    assert.equal(parseDecimal(' 1500 '), 1500);
+    assert.equal(parseDecimal('2.'), 2);
+    assert.equal(parseDecimal(',5'), 0.5);
+  }
+  assert.equal(parseDecimal(''), null);
+  assert.equal(parseDecimal('   '), null);
+  assert.equal(parseDecimal(null), null);
+  assert.equal(parseDecimal(1.8), 1.8);
+  for (const bad of ['1,234.5', '1.2.3', '1,2,3', '1.2,3', '-1', '+1', '1e3', 'abc', '.', ',', '1 000', '12a']) {
+    assert.ok(Number.isNaN(parseDecimal(bad)), bad);
+  }
+});
+
+test('numText: a number for a field, all decimals kept, with the language separator', () => {
+  assert.equal(numText(1.789), '1.789');
+  assert.equal(numText(null), '');
+  setLang('it');
+  assert.equal(numText(1.789), '1,789');
+  assert.equal(numText(1500), '1500');
 });

@@ -24,6 +24,29 @@ const EN = {
   'set.openAdvanced': 'Advanced settings\n(registration certificate)',
   'set.avgTooLow': 'This average is too low for this vehicle: it cannot be reached.',
   'common.cancel': 'Cancel',
+  'common.close': 'Close',
+
+  // footer (footer.js)
+  'share.open': 'Share',
+  'share.title': 'Share VerDrive',
+  'share.qrAlt': 'QR code for {url}',
+  'share.copy': 'Copy link',
+  'share.copied': 'Copied!',
+  'share.copyPrompt': 'Copy this link:',
+  'share.text': 'Live fuel cost of your car, from GPS and a physics model.',
+  'credits.open': 'Credits',
+  'coffee.long': 'Buy me a coffee',
+  'coffee.short': 'coffee?',
+  'credits.loading': 'Loading…',
+  'credits.failed': 'Could not load the credits. Read them online:',
+  'install.open': 'Install',
+  'install.title': 'Install VerDrive',
+  'install.ios1': 'Tap the Share button',
+  'install.ios2': 'Tap “Show more”',
+  'install.ios3': 'Tap “Add to Home Screen”',
+  'install.firefox': "Firefox on a computer can't install web apps.\nUse Chrome or Edge, or Firefox on Android (menu → Install).",
+  'install.safari': 'To install: File → Add to Dock.',
+  'install.other': 'To install: browser menu → "Install app" (or "Add to Home screen").\nAlready installed? Open it from your apps.',
 
   'veh.city': 'City car', 'veh.sedan': 'Sedan', 'veh.suv': 'SUV', 'veh.van': 'Van', 'veh.scooter': 'Scooter', 'veh.moto': 'Motorcycle',
   'fuel.gasoline': 'Gasoline', 'fuel.diesel': 'Diesel', 'fuel.lpg': 'LPG (GPL)', 'fuel.lpgShort': 'LPG',
@@ -46,6 +69,8 @@ const EN = {
   'adv.v7': 'V.7: CO₂ emissions (g/km)',
   'adv.v7Hint': 'Tunes the fuel use of your car. Leave blank if the certificate has no WLTP value.',
   'adv.body': 'Body type',
+  'adv.cda': 'CdA: drag area (m²), optional',
+  'adv.cdaHint': 'Not on the certificate; search your model online. If you find the drag coefficient Cd and the frontal area A, multiply them (e.g. 0.30 × 2.2 m² = 0.66). Blank: the typical value for your vehicle type.',
   'adv.startStop': 'Start-stop',
   'adv.startStopHint': 'The engine switches off when the car stops.',
   'adv.save': 'Save advanced settings',
@@ -66,6 +91,8 @@ const EN = {
   'field.displacement': 'P.1 (engine capacity)',
   'field.ratedKw': 'P.2 (maximum power)',
   'field.co2': 'V.7 (CO₂)',
+  'field.cda': 'CdA (drag area)',
+  'field.price': 'The price',
   'field.average': 'Average consumption',
   'err.numberRange': '{name} should be a number between {min} and {max} {unit}.',
   'err.range': '{name} should be between {min} and {max} {unit}.',
@@ -74,12 +101,14 @@ const EN = {
   'err.gMinusG1': 'G minus G.1 is {d} kg, but the driver is {r} kg. Check both values, or leave one blank.',
   'err.laden': 'The maximum laden mass (F.1 or F.2) must be above the vehicle mass.',
   'err.aboveZero': 'Both values must be above zero.',
+  'err.notNumber': 'Type numbers only, with at most one decimal separator ("." or ",").',
   'err.avgWrong': '{v} L/100 km looks wrong. {err}',
   'note.fMissing': 'No laden mass (F.1 or F.2) given: the WLTP test mass is the vehicle mass + 25 kg, without the payload share.',
   'note.fEstimate': "G not given: mass with rider estimated from the laden mass ({m} kg). It is rough and a little high, because the laden mass includes the manufacturer's luggage allowance.",
   'note.gAgree': 'G and G.1 agree (75 kg apart). Mass {m} kg.',
   'note.g1': 'Mass from G.1 (empty mass) + 75 kg driver: {m} kg.',
   'note.gMissing': 'G not given: the typical mass of this vehicle type ({m} kg) is used.',
+  'note.cda': 'Drag area from your CdA: {v} m².',
   'note.motoAverage': 'Enter your average consumption (Calc button in the car settings) to tune the fuel use to your bike.',
   'note.motoLow': 'The average is too low for this idle rate: k keeps its Quick value.',
   'note.noFigure': 'No consumption figure given: the fuel constant k keeps its Quick value.',
@@ -166,6 +195,13 @@ const EN = {
   'sum.co2': 'CO₂',
   'sum.tree': '🌳 Time to absorb',
   'sum.ac': 'A/C',
+  'sum.style': 'Driving style',
+  'style.eco': 'Eco',
+  'style.good': 'Good',
+  'style.brisk': 'Brisk',
+  'style.accel': 'accelerations +{p}%',
+  'style.speed': 'speed +{p}%',
+  'style.same': 'about the fuel of calm driving',
   'sum.replay': 'Replay of {file}, with {vehicle} · {fuel} · €{price}/L',
   'sum.export': 'Export log',
   'sum.newTrip': 'New trip',
@@ -193,6 +229,28 @@ const IT = {
   'set.openAdvanced': 'Impostazioni avanzate\n(carta di circolazione)',
   'set.avgTooLow': 'Questo consumo medio è troppo basso per questo veicolo: non è raggiungibile.',
   'common.cancel': 'Annulla',
+  'common.close': 'Chiudi',
+
+  'share.open': 'Condividi',
+  'share.title': 'Condividi VerDrive',
+  'share.qrAlt': 'Codice QR per {url}',
+  'share.copy': 'Copia link',
+  'share.copied': 'Copiato!',
+  'share.copyPrompt': 'Copia questo link:',
+  'share.text': 'Il costo del carburante della tua auto in tempo reale, da GPS e un modello fisico.',
+  'credits.open': 'Crediti',
+  'coffee.long': 'Offrimi un caffè',
+  'coffee.short': 'caffè?',
+  'credits.loading': 'Caricamento…',
+  'credits.failed': 'Impossibile caricare i crediti. Leggili online:',
+  'install.open': 'Installa',
+  'install.title': 'Installa VerDrive',
+  'install.ios1': 'Tocca il pulsante Condividi',
+  'install.ios2': 'Tocca “Mostra altro”',
+  'install.ios3': 'Tocca “Aggiungi alla schermata Home”',
+  'install.firefox': 'Firefox su computer non installa app web.\nUsa Chrome o Edge, oppure Firefox su Android (menu → Installa).',
+  'install.safari': 'Per installare: File → Aggiungi al Dock.',
+  'install.other': 'Per installare: menu del browser → "Installa app" (o "Aggiungi a schermata Home").\nGià installata? Aprila dalle tue app.',
 
   'veh.city': 'Citycar', 'veh.sedan': 'Berlina', 'veh.suv': 'SUV', 'veh.van': 'Furgone', 'veh.scooter': 'Scooter', 'veh.moto': 'Moto',
   'fuel.gasoline': 'Benzina', 'fuel.diesel': 'Gasolio', 'fuel.lpg': 'GPL', 'fuel.lpgShort': 'GPL',
@@ -214,6 +272,8 @@ const IT = {
   'adv.v7': 'V.7: emissioni di CO₂ (g/km)',
   'adv.v7Hint': 'Adatta il consumo della tua auto. Lascia vuoto se la carta non riporta un valore WLTP.',
   'adv.body': 'Carrozzeria',
+  'adv.cda': 'CdA: area di resistenza (m²), facoltativo',
+  'adv.cdaHint': 'Non è sulla carta di circolazione: cerca il tuo modello online. Se trovi il coefficiente Cx e l’area frontale A, moltiplicali (es. 0,30 × 2,2 m² = 0,66). Vuoto: il valore tipico del tuo tipo di veicolo.',
   'adv.startStop': 'Start-stop',
   'adv.startStopHint': "Il motore si spegne quando l'auto si ferma.",
   'adv.save': 'Salva impostazioni avanzate',
@@ -233,6 +293,8 @@ const IT = {
   'field.displacement': 'P.1 (cilindrata)',
   'field.ratedKw': 'P.2 (potenza massima)',
   'field.co2': 'V.7 (CO₂)',
+  'field.cda': 'CdA (area di resistenza)',
+  'field.price': 'Il prezzo',
   'field.average': 'Consumo medio',
   'err.numberRange': '{name}: serve un numero tra {min} e {max} {unit}.',
   'err.range': '{name}: deve essere tra {min} e {max} {unit}.',
@@ -241,12 +303,14 @@ const IT = {
   'err.gMinusG1': 'G meno G.1 fa {d} kg, ma il conducente pesa {r} kg. Controlla i due valori o lasciane uno vuoto.',
   'err.laden': 'La massa massima a pieno carico (F.1 o F.2) deve superare la massa del veicolo.',
   'err.aboveZero': 'Entrambi i valori devono essere maggiori di zero.',
+  'err.notNumber': 'Scrivi solo numeri, con al massimo un separatore decimale ("." o ",").',
   'err.avgWrong': '{v} L/100 km non sembra corretto. {err}',
   'note.fMissing': 'Nessuna massa a pieno carico (F.1 o F.2): la massa di prova WLTP è la massa del veicolo + 25 kg, senza la quota di carico.',
   'note.fEstimate': 'G non indicato: massa con conducente stimata dalla massa a pieno carico ({m} kg). È approssimativa e un po’ alta, perché la massa a pieno carico include il bagaglio previsto dal costruttore.',
   'note.gAgree': 'G e G.1 concordano (75 kg di differenza). Massa {m} kg.',
   'note.g1': 'Massa da G.1 (massa a vuoto) + 75 kg di conducente: {m} kg.',
   'note.gMissing': 'G non indicato: si usa la massa tipica di questo tipo di veicolo ({m} kg).',
+  'note.cda': 'Area di resistenza dal tuo CdA: {v} m².',
   'note.motoAverage': 'Inserisci il tuo consumo medio (pulsante Calcola nelle impostazioni del veicolo) per adattare il consumo alla tua moto.',
   'note.motoLow': 'Il consumo medio è troppo basso per questo consumo al minimo: k mantiene il valore rapido.',
   'note.noFigure': 'Nessun dato di consumo: la costante k mantiene il valore rapido.',
@@ -328,6 +392,13 @@ const IT = {
   'sum.co2': 'CO₂',
   'sum.tree': '🌳 Tempo di assorbimento',
   'sum.ac': 'Clima',
+  'sum.style': 'Stile di guida',
+  'style.eco': 'Eco',
+  'style.good': 'Buono',
+  'style.brisk': 'Vivace',
+  'style.accel': 'accelerazioni +{p}%',
+  'style.speed': 'velocità +{p}%',
+  'style.same': 'circa il carburante di una guida calma',
   'sum.replay': 'Viaggio rivisto: {file}, con {vehicle} · {fuel} · €{price}/L',
   'sum.export': 'Esporta log',
   'sum.newTrip': 'Nuovo viaggio',
@@ -366,6 +437,29 @@ export function t(key, vars = {}) {
 /** A number with fixed decimals in the current language: 1.5 → "1.5" (en), "1,5" (it). No thousands separator. */
 export function nf(x, decimals = 0) {
   const s = Number(x).toFixed(decimals);
+  return lang === 'it' ? s.replace('.', ',') : s;
+}
+
+/**
+ * Typed decimal text to a number. Either "." or "," is the decimal separator, whatever the language; at most one
+ * separator, no sign, no thousands grouping ("1,234.5" and "1.2.3" are invalid). Blank gives null; anything else
+ * that is not such a number gives NaN, so the caller can tell junk from an empty field.
+ * @param {string|number|null|undefined} x
+ * @returns {number|null}
+ */
+export function parseDecimal(x) {
+  if (x === null || x === undefined) return null;
+  if (typeof x === 'number') return Number.isFinite(x) ? x : NaN;
+  const s = String(x).trim();
+  if (s === '') return null;
+  if (!/^(\d+([.,]\d*)?|[.,]\d+)$/.test(s)) return NaN;
+  return Number(s.replace(',', '.'));
+}
+
+/** A number written into an input field, with all its decimals and the language's separator: 0.62 → "0,62" (it). */
+export function numText(x) {
+  if (x === null || x === undefined || x === '') return '';
+  const s = String(x);
   return lang === 'it' ? s.replace('.', ',') : s;
 }
 

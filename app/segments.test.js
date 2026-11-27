@@ -42,16 +42,19 @@ test('segmentPaths: a space is an unlit digit, "_" an unlit point', () => {
   assert.equal(segmentPaths('8_8').width, segmentPaths('8.8').width);
 });
 
-test('fixedDigits: always four digits and a point, so the width never changes', () => {
-  assert.equal(fixedDigits(8.54), '  8.5');
-  assert.equal(fixedDigits(0), '  0.0');
-  assert.equal(fixedDigits(35.8), ' 35.8');
+test('fixedDigits: three digits and a point, a fourth digit above 99.9', () => {
+  assert.equal(fixedDigits(8.54), ' 8.5');
+  assert.equal(fixedDigits(0), ' 0.0');
+  assert.equal(fixedDigits(35.8), '35.8');
+  assert.equal(fixedDigits(99.94), '99.9');
+  assert.equal(fixedDigits(99.96), '100.0');
   assert.equal(fixedDigits(123.44), '123.4');
   assert.equal(fixedDigits(999.94), '999.9');
-  assert.equal(fixedDigits(999.96), '100_0');
-  assert.equal(fixedDigits(1234.4), '123_4');
-  assert.equal(fixedDigits(50000), '999_9');
-  for (const v of [null, NaN, Infinity, -1]) assert.equal(fixedDigits(v), '---_-');
-  const w = segmentPaths('888.8').width;
-  for (const v of [null, 1.2, 12.3, 456.7, 4567]) assert.equal(segmentPaths(fixedDigits(v)).width, w, String(v));
+  assert.equal(fixedDigits(999.96), '999.9');
+  assert.equal(fixedDigits(50000), '999.9');
+  for (const v of [null, NaN, Infinity, -1]) assert.equal(fixedDigits(v), '--_-');
+  const w = segmentPaths('88.8').width;
+  for (const v of [null, 1.2, 12.3]) assert.equal(segmentPaths(fixedDigits(v)).width, w, String(v));
+  const w4 = segmentPaths('888.8').width;
+  for (const v of [123.4, 4567]) assert.equal(segmentPaths(fixedDigits(v)).width, w4, String(v));
 });

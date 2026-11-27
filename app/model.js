@@ -128,7 +128,12 @@ export function toCost({ litres, price }) {
 /**
  * Road angle from an altitude change over a travelled distance.
  *
- *   sinθ = dh / dist,   θ = asin(dh / dist)
+ *   tanθ = dh / dist,   θ = atan(dh / dist)
+ *
+ * `dist` is the integral of the GPS speed, which is the horizontal component of the velocity (W3C Geolocation:
+ * "the horizontal component"), so dh / dist is rise over horizontal run: tanθ, the road-sign grade. atan gives
+ * the exact angle, and tractivePower then takes its sine. (Until 2026-11-27 this was asin, which treated tanθ as
+ * sinθ: about 2% too much slope force at 20%, 3% at the 25% clamp.)
  *
  * GPS altitude is noisy (several metres), so a short distance would turn that noise into
  * wild slopes. Below `minDist` there is no answer yet (null: the caller keeps the last value).
@@ -136,15 +141,16 @@ export function toCost({ litres, price }) {
  *
  * @param {object} p
  * @param {number} p.dh          altitude change (m); positive when climbing
- * @param {number} p.dist        distance travelled along the road (m)
+ * @param {number} p.dist        horizontal distance travelled (m): the integral of the GPS speed
  * @param {number} [p.minDist]   shortest distance that gives an answer (m)
  * @param {number} [p.maxGrade]  clamp on dh/dist (dimensionless; 0.25 = 25%)
  * @returns {number|null} θ in radians (positive uphill), or null when dist < minDist
  */
-export function slopeFromAltitude({ dh, dist, minDist = 50, maxGrade = 0.25 }) {
+// minDist 32 m since 2026-11-27 (was 50 m), on trial: replays showed the same accuracy and a jumpier reading in town.
+export function slopeFromAltitude({ dh, dist, minDist = 32, maxGrade = 0.25 }) {
   if (!(dist >= minDist)) return null; // also catches NaN and non-positive distances
   const ratio = Math.max(-maxGrade, Math.min(maxGrade, dh / dist));
-  return Math.asin(ratio);
+  return Math.atan(ratio);
 }
 
 /**
@@ -405,4 +411,47 @@ export function altitudeStep({ prevAlt, alt, step, maxGrade = 0.25, noise = 3 })
   const dh = Math.abs(alt - prevAlt);
   if (dh > maxGrade * dist + noise) return 'jump';
   return dh === 0 ? 'same' : 'move';
+}
+
+/**
+ * Driving style: how much fuel this drive used compared with a calm driver on the same route.
+ *
+ * The calm driver is a shadow run alongside the trip: its speed is the real speed smoothed with a time
+ * constant of CALM_TAU seconds (`smooth`), then capped at an efficient cruising speed for the vehicle type.
+ * So it stops and starts where the real driver did, but accelerates and brakes gently and never drives
+ * faster than the cap. Its fuel is computed with the same model, the same slopes and the same A/C load.
+ * `ratio` is the real fuel per km divided by the calm fuel per km (see `styleFactors`).
+ *
+ * First thresholds, provisional (2026-11-27): car drives without speeding gave 1.05–1.16; two scooter rides
+ * gave 1.27 (calmer) and 1.28 (brisker). To be recalibrated on rides the driver labels calm, normal or brisk.
+ *
+ *   ratio ≤ 1.10: 'eco';   ≤ 1.25: 'good';   above: 'brisk'
+ *
+ * @param {number} ratio  real fuel per km ÷ calm fuel per km
+ * @returns {'eco'|'good'|'brisk'|null} null when the ratio is not a usable number
+ */
+export const CALM_TAU = 5;            // s: smoothing of the calm driver's speed
+export const QUALITY_ECO = 1.10;      // ratio up to which the drive is 'eco'
+export const QUALITY_GOOD = 1.25;     // ratio up to which the drive is 'good'; above it, 'brisk'
+export function driveQuality(ratio) {
+  if (!Number.isFinite(ratio) || ratio <= 0) return null;
+  if (ratio <= QUALITY_ECO) return 'eco';
+  if (ratio <= QUALITY_GOOD) return 'good';
+  return 'brisk';
+}
+
+/**
+ * Split the extra fuel of a drive into its two causes, from three fuel totals over the same trip:
+ * - `real`:   the drive itself;
+ * - `smooth`: the shadow with the smoothed speed (same speeds, gentle accelerations and brakings);
+ * - `calm`:   the same shadow, also capped at the efficient cruising speed.
+ * Each is `{ litres, dist }` (L, m). The factors multiply: total = accel × speed.
+ *
+ * @returns {{ total: number, accel: number, speed: number } | null}  null when a total is empty
+ */
+export function styleFactors({ real, smooth, calm }) {
+  const perM = ({ litres, dist }) => (litres > 0 && dist > 0 ? litres / dist : NaN);
+  const r = perM(real), s = perM(smooth), c = perM(calm);
+  if (![r, s, c].every(Number.isFinite)) return null;
+  return { total: r / c, accel: r / s, speed: s / c };
 }

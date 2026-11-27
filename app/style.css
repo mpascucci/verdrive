@@ -369,6 +369,45 @@ dialog button { width: 100%; margin-top: 0.6rem; }
 .summary div { border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 0.45rem 0.75rem; }
 .summary dt { color: var(--dim); font-size: 0.62rem; }
 .summary dd { margin: 0.05rem 0 0; font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+/* driving style: a full-width card first; the word in the level's colour, the comparison after it */
+.summary .style { grid-column: 1 / -1; }
+.summary .style dd { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.6rem; }
+.summary .style small { font-size: 0.75rem; font-weight: 400; letter-spacing: 0; }
+.summary .style[data-level="eco"] dd { color: var(--low); }        /* green */
+.summary .style[data-level="good"] dd { color: var(--scale-75); }  /* yellow, as on the dial */
+.summary .style[data-level="brisk"] dd { color: var(--high); }     /* red */
+.summary .style small { color: var(--dim); }
+/* portrait: label and figure on one line, to keep the page short; the driving style (badge and note) and the
+   tree card (long label) stay stacked. Landscape cards are too narrow for this and stay stacked (below). */
+.summary div:not(.style):not(.tree) { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; padding-top: 0.45rem; padding-bottom: 0.45rem; }
+.summary div:not(.style):not(.tree) dt { font-size: 0.72rem; white-space: nowrap; }
+.summary div:not(.style):not(.tree) dd { margin: 0; white-space: nowrap; }
+.summary .tree { display: flex; flex-direction: column; justify-content: center; } /* centred beside a one-line card */
+/* portrait: the wrappers are invisible, so the summary is one column as before */
+.sum-main, .sum-side, .sum-actions { display: contents; }
+
+/* landscape phone: the profile fills the left column; the figures (three across) and the two buttons (one row)
+   fit on the right, so the whole summary is visible without scrolling. */
+@media (orientation: landscape) and (max-height: 520px) {
+  #screen-summary {
+    max-width: 60rem; padding-top: 0.75rem;
+    display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 0.75rem 1.25rem; align-items: start;
+  }
+  #screen-summary h1 { font-size: 1.4rem; }
+  .sum-main, .sum-side { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+  .sum-main .summary-note { margin: 0; }
+  .sum-main .profile { margin: 0; }
+  .sum-side .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+  .sum-side .summary div { padding: 0.35rem 0.6rem; }
+  .sum-side .summary div:not(.style):not(.tree) { display: block; } /* stacked again: the cards are narrow here */
+  .sum-side .summary div:not(.style):not(.tree) dt { font-size: 0.62rem; }
+  .sum-side .summary .tree { grid-column: span 2; } /* its label is the longest; it fills the row after CO₂ */
+  .sum-side .summary dd { font-size: 1rem; }
+  .sum-side .tree-detail { order: 1; margin: 0; padding: 0.6rem 0.8rem; font-size: 0.85rem; } /* below the buttons, which stay in view */
+  .sum-actions { display: flex; gap: 0.5rem; }
+  #screen-summary .sum-actions button { flex: 1; min-height: 52px; margin-top: 0; }
+  #screen-summary .sum-actions button.primary { flex: 1.6; font-size: 1.1rem; }
+}
 
 /* ---------- version label ---------- */
 .version { margin: 0; text-align: center; color: var(--dim); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
@@ -377,3 +416,75 @@ dialog button { width: 100%; margin-top: 0.6rem; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---------- footer of trip setup (footer.js) ----------
+   One centred line in small type at the bottom of the screen: language, Share, Credits, Install.
+   Each item is a span directly in .foot; CSS draws the "·" between visible items, so a hidden item takes its
+   separator with it. The buttons look small but their tap area is 44 px tall (::after). */
+.foot {
+  display: flex; justify-content: center; align-items: center;
+  margin: auto -1rem -1rem; /* bottom of the screen, flush with its sides (cancels the screen padding) */
+  min-height: 44px; padding: 0 0.5rem;
+  border-top: 1px solid var(--line);
+  color: var(--dim); font-size: 0.8rem; white-space: nowrap;
+  overflow-x: clip; /* the Install slide-in must not scroll the page sideways (clip keeps the tap areas above and below) */
+}
+.foot > * { display: inline-flex; align-items: center; }
+.foot > * + *::before { content: "·"; margin: 0 0.5em; }
+.foot svg { width: 1.1em; height: 1.1em; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.foot-btn {
+  position: relative; display: inline-flex; align-items: center; gap: 0.35em;
+  min-height: 0; padding: 0.2em 0.1em; border: 0; border-radius: 6px; background: none;
+  color: inherit; font-size: inherit; text-decoration: underline; text-underline-offset: 3px;
+}
+.foot-btn::after { content: ''; position: absolute; inset: -10px -4px; } /* 44 px tap area */
+.foot-btn:hover, .foot-lang:hover { color: var(--bone); }
+/* language: a globe and the code; the transparent native <select> on top opens the full names */
+.foot-lang { position: relative; gap: 0.3em; cursor: pointer; }
+.foot-lang select { position: absolute; inset: -10px -4px; width: calc(100% + 8px); opacity: 0; cursor: pointer; font-size: 16px; }
+.foot-lang:has(select:focus-visible) { outline: 3px solid var(--mid); outline-offset: 2px; border-radius: 4px; }
+/* Share: outlined; Install: filled, the one item meant to catch the eye */
+#share-open { padding: 0.2em 0.6em; border: 1px solid currentColor; text-decoration: none; }
+#install-open { padding: 0.2em 0.6em; background: var(--bone); color: var(--ink); font-weight: 600; text-decoration: none; }
+#install-open:hover { background: #fff; }
+@media (display-mode: standalone) { .foot-install { display: none !important; } }
+/* on load: the Install button slides in, then pulses a few times (finite; off with reduced motion) */
+@keyframes install-slide { from { opacity: 0; transform: translateX(3rem); } to { opacity: 1; transform: none; } }
+@keyframes install-pulse { from { box-shadow: 0 0 0 0 rgba(236, 232, 218, 0.6); } to { box-shadow: 0 0 0 9px rgba(236, 232, 218, 0); } }
+#install-open { animation: install-slide 0.4s ease-out 0.3s both, install-pulse 1.25s ease-out 0.9s 3; }
+@media (prefers-reduced-motion: reduce) { #install-open { animation: none; } }
+/* phones: Share shows only its icon (its name stays in aria-label), tighter separators; Credits goes below 350 px */
+@media (max-width: 600px) {
+  .share-label { display: none; }
+  #share-open { padding: 0.2em 0.45em; }
+  .foot > * + *::before { margin: 0 0.4em; }
+}
+@media (max-width: 349px) { .foot-credits { display: none; } }
+/* Buy me a coffee: a plain link, never hidden; on small screens, while Install shows, it shortens to "☕ coffee?" */
+.foot-coffee a { position: relative; padding: 0.2em 0.1em; color: inherit; text-underline-offset: 3px; }
+.foot-coffee a::after { content: ''; position: absolute; inset: -10px -4px; } /* 44 px tap area */
+.foot-coffee a:hover { color: var(--bone); }
+.cof-short { display: none; }
+@media (max-width: 600px) {
+  @media not (display-mode: standalone) {
+    .foot:has(.foot-install:not([hidden])) .cof-long { display: none; }
+    .foot:has(.foot-install:not([hidden])) .cof-short { display: inline; }
+  }
+}
+
+/* footer dialogs */
+.foot-dialog[open] { display: flex; flex-direction: column; max-height: 86dvh; }
+#share-dialog { align-items: center; text-align: center; }
+#share-dialog h2 { margin-bottom: 0.75rem; }
+#share-qr { width: min(200px, 60vw); height: auto; aspect-ratio: 1; padding: 6px; border-radius: 10px; background: #fff; image-rendering: pixelated; }
+#share-copy.done { border-color: var(--low); color: var(--low); }
+.credits-body { overflow-y: auto; font-size: 0.9rem; line-height: 1.5; }
+.credits-body h2 { margin: 0 0 0.6rem; }
+.credits-body h3 { margin: 1rem 0 0.3rem; font-size: 0.95rem; color: var(--dim-hi); }
+.credits-body p, .credits-body ul { margin: 0 0 0.6rem; }
+.credits-body ul { padding-left: 1.2rem; }
+.credits-body a { color: var(--low); overflow-wrap: anywhere; }
+.credits-body code { font-size: 0.85em; padding: 1px 4px; border-radius: 4px; background: var(--panel); }
+.install-steps { margin: 0; padding-left: 1.4em; line-height: 1.5; }
+.install-steps li + li { margin-top: 0.5rem; }
+.ios-share { width: 1.2em; height: 1.2em; vertical-align: -0.25em; fill: none; stroke: var(--low); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

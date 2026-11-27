@@ -4,6 +4,7 @@
 import {
   tractivePower, fuelRate, smooth, toCost,
   slopeFromAltitude, smoothSlope, slopeLength, altitudeStep, co2FromFuel, treeDays, CO2_PER_LITRE, TREE_KG_PER_YEAR,
+  driveQuality, styleFactors, CALM_TAU,
 } from './model.js';
 import { startGps, stopGps, signalBars } from './gps.js';
 import { binProfile, extremes } from './elevation.js';
@@ -11,7 +12,8 @@ import { startUpdates, reloadIfUpdateWaiting } from './update.js';
 import { buildAdvanced, buildAdvancedMoto, simulatedWltp, checkAverage, kFromAverage, averageFromFuel } from './profile.js';
 import { normalizeStore, settingsFor, activeSettings, saveVehicle, setActive, recentVehicles } from './vehicles.js';
 import { startLog, stopLog, logAdd, logActive, hasSavedLogs, exportLatestLog, parseLog } from './triplog.js';
-import { t, nf, loadLang, saveLang, getLang, applyStatic } from './i18n.js';
+import { t, nf, loadLang, saveLang, getLang, applyStatic, parseDecimal, numText } from './i18n.js';
+import { initFooter, renderFooter } from './footer.js';
 import { segmentPaths, fixedDigits } from './segments.js';
 
 loadLang();
@@ -20,12 +22,13 @@ const fuelLabel = (id) => t(`fuel.${id}`);
 
 // ---------- Tier 1 presets (gasoline), from ROADMAP.md ----------
 const PRESETS = {
-  city:  { label: 'City car', m: 1100, cdA: 0.60, f0: 0.6, pAc: 1000 },
-  sedan: { label: 'Sedan',    m: 1500, cdA: 0.65, f0: 0.8, pAc: 1500 },
-  suv:   { label: 'SUV',      m: 2000, cdA: 0.90, f0: 1.0, pAc: 2000 },
-  van:   { label: 'Van',      m: 2500, cdA: 1.10, f0: 1.2, pAc: 2000 },
-  scooter: { label: 'Scooter', m: 175, cdA: 0.40, f0: 0.25, pAc: 0, gasolineOnly: true },
-  moto:    { label: 'Motorcycle', m: 300, cdA: 0.35, f0: 0.4, pAc: 0, gasolineOnly: true },
+  // calmMax: efficient cruising speed (km/h) of the calm driver behind the driving style (developer's choice, 2026-11-27)
+  city:  { label: 'City car', m: 1100, cdA: 0.60, f0: 0.6, pAc: 1000, calmMax: 110 },
+  sedan: { label: 'Sedan',    m: 1500, cdA: 0.65, f0: 0.8, pAc: 1500, calmMax: 110 },
+  suv:   { label: 'SUV',      m: 2000, cdA: 0.90, f0: 1.0, pAc: 2000, calmMax: 110 },
+  van:   { label: 'Van',      m: 2500, cdA: 1.10, f0: 1.2, pAc: 2000, calmMax: 110 },
+  scooter: { label: 'Scooter', m: 175, cdA: 0.40, f0: 0.25, pAc: 0, gasolineOnly: true, calmMax: 90 }, // meant for town and around it
+  moto:    { label: 'Motorcycle', m: 300, cdA: 0.35, f0: 0.4, pAc: 0, gasolineOnly: true, calmMax: 110 },
 };
 const FUELS = {
   gasoline: { label: 'Gasoline', k: 0.45 },
@@ -144,7 +147,7 @@ function syncFuelChoices() {
 // (likely the same) and starts without an average, which belongs to one vehicle.
 form.querySelectorAll('input[name="vehicle"]').forEach((r) => r.addEventListener('change', () => {
   const saved = settingsFor(store, form.vehicle.value);
-  if (saved) { form.fuel.value = saved.fuel; form.price.value = saved.price; form.average.value = averageToField(saved.average); }
+  if (saved) { form.fuel.value = saved.fuel; form.price.value = numText(saved.price); form.average.value = averageToField(saved.average); }
   else form.average.value = '';
   $('average-err').textContent = '';
   syncFuelChoices();
@@ -152,40 +155,40 @@ form.querySelectorAll('input[name="vehicle"]').forEach((r) => r.addEventListener
 // Picking a fuel on the Settings screen brings back the last price paid for it.
 form.fuel.addEventListener('change', () => {
   const price = lastPrice(form.fuel.value);
-  if (price !== null) form.price.value = price;
+  if (price !== null) form.price.value = numText(price);
 });
-// Language: first row of the settings. It applies at once; Italian also switches the consumption to km/L.
-form.lang.addEventListener('change', () => {
+// Language: first row of the settings, and the footer picker on trip setup. It applies at once; Italian also
+// switches the consumption to km/L.
+form.lang.addEventListener('change', () => changeLang(form.lang.value));
+function changeLang(l) {
   const typed = averageFromField(form.average.value); // read in the old language's unit
-  saveLang(form.lang.value);
+  const price = parseDecimal(form.price.value);
+  saveLang(l);
+  form.lang.value = getLang();
   applyStatic();
-  syncAverageLimits();
+  renderFooter();
   if (typed.value !== null && !typed.error) form.average.value = averageToField(typed.value);
+  if (price !== null && !Number.isNaN(price)) form.price.value = numText(price); // the new language's separator
   fuelUnit = defaultFuelUnit();
   try { localStorage.setItem(FUEL_UNIT_KEY, fuelUnit); } catch { /* not remembered */ }
   $('average-err').textContent = '';
   if ($('version').dataset.id) $('version').textContent = t('version', { id: $('version').dataset.id });
-});
+}
 // Average consumption is stored in L/100 km (the model's unit). In Italian the field, Calc and the recap use km/L,
 // the unit people know there: km/L = 100 / (L/100 km).
 const AVG_KML_MIN = 100 / 40, AVG_KML_MAX = 100; // the 1–40 L/100 km range of checkAverage, in km/L
 const averageInKml = () => getLang() === 'it';
 function averageToField(l100) {
   if (l100 == null || !(l100 > 0)) return '';
-  return averageInKml() ? Number((100 / l100).toFixed(1)) : l100;
+  return numText(averageInKml() ? Number((100 / l100).toFixed(1)) : l100);
 }
 function averageFromField(text) {
   if (!averageInKml() || String(text).trim() === '') return checkAverage(text);
-  const kml = Number(String(text).replace(',', '.'));
+  const kml = parseDecimal(text);
   if (!Number.isFinite(kml) || kml < AVG_KML_MIN || kml > AVG_KML_MAX) {
     return { value: null, error: t('err.range', { name: t('field.average'), min: nf(AVG_KML_MIN, 1), max: AVG_KML_MAX, unit: 'km/L' }) };
   }
   return checkAverage(Math.round((100 / kml) * 100) / 100);
-}
-// the field's own limits follow the unit (the browser checks them before the form is sent)
-function syncAverageLimits() {
-  form.average.min = averageInKml() ? AVG_KML_MIN : 1;
-  form.average.max = averageInKml() ? AVG_KML_MAX : 40;
 }
 function averageText(l100) {
   return averageInKml() ? `${nf(100 / l100, 1)} km/L` : `${nf(l100, 2)} L/100 km`;
@@ -193,26 +196,28 @@ function averageText(l100) {
 
 function fillForm() {
   form.lang.value = getLang();
-  syncAverageLimits();
   if (!settings) return;
   form.vehicle.value = settings.vehicle;
   form.fuel.value = settings.fuel;
-  form.price.value = settings.price;
+  form.price.value = numText(settings.price);
   form.average.value = averageToField(settings.average);
   $('average-err').textContent = '';
+  $('price-err').textContent = '';
   syncFuelChoices();
 }
 // Opening the advanced settings first saves, silently, whatever the basic form already holds: the vehicle (a sedan
 // if none was chosen), the fuel (gasoline if none), the price (the saved one, else DEFAULT_PRICE) and the average
 // (only if valid and reachable). The certificate fields are stored for this vehicle, so it has to exist.
 const DEFAULT_PRICE = 1.8; // EUR per litre, used only when no price was typed or saved: visible in the recap, easy to change
+const PRICE_MIN = 0.1, PRICE_MAX = 10; // EUR per litre: outside this the price is surely a typo
+const priceOk = (p) => p !== null && p >= PRICE_MIN && p <= PRICE_MAX; // NaN fails the comparisons
 function commitBasics() {
   const vehicle = form.vehicle.value || settings?.vehicle || 'sedan';
   form.vehicle.value = vehicle;
   const saved = settingsFor(store, vehicle);
   const fuel = PRESETS[vehicle].gasolineOnly ? 'gasoline' : (form.fuel.value || saved?.fuel || 'gasoline');
-  const typed = Number(form.price.value);
-  const price = typed > 0 ? typed : (saved?.price ?? settings?.price ?? DEFAULT_PRICE);
+  const typed = parseDecimal(form.price.value);
+  const price = priceOk(typed) ? typed : (saved?.price ?? settings?.price ?? DEFAULT_PRICE);
   const next = { vehicle, fuel, price, advanced: saved?.advanced };
   const average = averageFromField(form.average.value);
   if (average.value !== null && !average.error) next.average = average.value;
@@ -224,14 +229,19 @@ function commitBasics() {
   }
   saveSettings(settings);
   form.fuel.value = fuel;
-  form.price.value = price;
+  form.price.value = numText(price);
+  $('price-err').textContent = '';
   syncFuelChoices();
 }
 
 form.addEventListener('submit', (e) => {
   e.preventDefault();
+  const price = parseDecimal(form.price.value);
+  $('price-err').textContent = priceOk(price) ? ''
+    : t(Number.isNaN(price) ? 'err.numberRange' : 'err.range', { name: t('field.price'), min: numText(PRICE_MIN), max: PRICE_MAX, unit: '€/L' });
+  if ($('price-err').textContent) return;
   const average = averageFromField(form.average.value);
-  const next = { vehicle: form.vehicle.value, fuel: form.fuel.value, price: Number(form.price.value), advanced: settingsFor(store, form.vehicle.value)?.advanced };
+  const next = { vehicle: form.vehicle.value, fuel: form.fuel.value, price, advanced: settingsFor(store, form.vehicle.value)?.advanced };
   if (average.value !== null && !average.error) next.average = average.value;
   const previous = settings;
   settings = next;
@@ -296,7 +306,7 @@ $('calc-cancel').addEventListener('click', () => calcDialog.close());
 
 // ---------- advanced settings screen (Tier 2) ----------
 const advForm = $('advanced-form');
-const ADV_FIELDS = ['g', 'g1', 'maxLaden', 'displacement', 'ratedKw', 'co2'];
+const ADV_FIELDS = ['g', 'g1', 'maxLaden', 'displacement', 'ratedKw', 'co2', 'cda'];
 function advResultText(p) {
   const parts = [isMoto()
     ? t('adv.resMoto', { m: Math.round(p.m), p: Math.round(p.pMax / 1000) })
@@ -397,7 +407,7 @@ function showSetup() {
   renderVehicleSwitch();
   $('setup-fuel').value = settings.fuel;
   $('setup-fuel').disabled = Boolean(p.gasolineOnly); // two-wheelers: gasoline only
-  $('setup-price').value = settings.price;
+  $('setup-price').value = numText(settings.price);
   $('setup-price').removeAttribute('aria-invalid');
   $('pax-label').textContent = t(PRESETS[settings.vehicle].gasolineOnly ? 'setup.onBike' : 'setup.people');
   $('pax').textContent = setup.passengers;
@@ -414,14 +424,14 @@ function updateFuelSettings(change) {
 $('setup-fuel').addEventListener('change', (e) => {
   const fuel = e.target.value;
   // a price typed but not yet committed (the field may still have focus) belongs to the fuel being left
-  const typed = Number($('setup-price').value);
-  if ($('setup-price').value !== '' && typed >= 0.1 && typed <= 10 && typed !== settings.price) updateFuelSettings({ price: typed });
+  const typed = parseDecimal($('setup-price').value);
+  if (priceOk(typed) && typed !== settings.price) updateFuelSettings({ price: typed });
   updateFuelSettings({ fuel, price: lastPrice(fuel) ?? settings.price });
   showSetup(); // the tier badge may change
 });
 $('setup-price').addEventListener('change', (e) => {
-  const price = Number(e.target.value);
-  const ok = e.target.value !== '' && price >= 0.1 && price <= 10;
+  const price = parseDecimal(e.target.value);
+  const ok = priceOk(price);
   e.target.setAttribute('aria-invalid', String(!ok));
   if (ok) updateFuelSettings({ price });
 });
@@ -566,6 +576,10 @@ function startTrip({ demo, replay = false }) {
     litres: 0,
     acLitres: 0,      // fuel attributable to A/C (estimated)
     idleLitres: 0,    // fuel burned while stopped
+    // driving style: two shadows on the same road (see styleFactors). smooth*: the real speed smoothed with
+    // CALM_TAU; calm*: the same, capped at the vehicle's calmMax. Fuel (L) and distance (m) of each.
+    smoothV: null, smoothLitres: 0, smoothDist: 0,
+    calmV: null, calmLitres: 0, calmDist: 0,
     ref: null,        // cost at steady cruise (€/h)
     recent: [{ s: 0, L: 0, d: 0 }], // running totals (seconds, litres, metres) for the last-5-minutes average
     profile: [],      // { d, h, L, s } per sample, for the altitude profile on the summary
@@ -698,6 +712,7 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
 
   if (first || dt <= 0 || dt > MAX_GAP) {
     trip.vPrev = v;
+    trip.smoothV = v; trip.calmV = null; // the shadows restart at the real speed after a gap
     resetSlopeWindow();
     updateSlope(0, altOk, v); // start a new altitude window here
     if (alt != null) trip.altS = alt;
@@ -719,6 +734,17 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
   const theta = trip.theta ?? 0; // no slope known yet: flat road
   const f = fuelAt(v, trip.aS, theta);
   trip.fS = smooth({ prev: trip.fS, value: f, dt });
+  // driving style: shadows on the same road, slope and A/C. They stop and start where the driver did, but
+  // accelerate and brake gently (smoothed speed), and the calm one never goes above the cruising cap.
+  const cap = PRESETS[settings.vehicle].calmMax / 3.6;
+  const smoothPrev = trip.smoothV ?? v;
+  const calmPrev = trip.calmV ?? Math.min(smoothPrev, cap);
+  trip.smoothV = smooth({ prev: smoothPrev, value: v, dt, tau: CALM_TAU });
+  trip.calmV = Math.min(trip.smoothV, cap);
+  trip.smoothLitres += (fuelAt(trip.smoothV, (trip.smoothV - smoothPrev) / dt, theta) * dt) / 3600;
+  trip.smoothDist += trip.smoothV * dt;
+  trip.calmLitres += (fuelAt(trip.calmV, (trip.calmV - calmPrev) / dt, theta) * dt) / 3600;
+  trip.calmDist += trip.calmV * dt;
   trip.vS = smooth({ prev: trip.vS, value: v, dt });
 
   // totals use the unsmoothed rate, so smoothing never changes the fuel used
@@ -911,7 +937,7 @@ function render() {
 
   // scale runs 0 to 2x the cruising cost, so cruise sits at 50%, near the top
   $('now-mark').style.transform = dialRotation(ratio / 2);
-  setDialValue(fixedDigits(cost)); // fixed 888.8 layout; the point is the same in both languages
+  setDialValue(fixedDigits(cost)); // 88.8 layout, a fourth digit above 99.9; the point is the same in both languages
   $('dial-value').style.setProperty('--cost-color', costColor(Math.min(1, ratio / 2)));
   setDialScale(ref);
 
@@ -1187,7 +1213,17 @@ function endTrip({ replayOf = null } = {}) {
   if (trip.demoTimer) clearInterval(trip.demoTimer);
   releaseWakeLock();
   const hadLog = stopLog();
+  summaryData = { trip, replayOf, hadLog };
+  trip = null;
+  renderSummary();
+  show('summary');
+}
 
+// The summary of the last trip.
+let summaryData = null;
+const STYLE_MIN_DIST = 1000; // m: shorter trips get no driving style
+function renderSummary() {
+  const { trip, replayOf, hadLog } = summaryData; // the finished trip (the global one is already null)
   const price = settings.price;
   const km = trip.distance / 1000;
   const total = toCost({ litres: trip.litres, price });
@@ -1205,19 +1241,40 @@ function endTrip({ replayOf = null } = {}) {
   const days = treeDays({ co2 });
   rows.push([t('sum.tree'), treeTime(days), 'tree']);
   if (trip.acLitres > 0) rows.push([t('sum.ac'), `€${nf(toCost({ litres: trip.acLitres, price }), 2)}`]);
+  // driving style: fuel per km against the calm shadow; from 1 km on, below that it says little
+  const factors = trip.distance >= STYLE_MIN_DIST ? styleFactors({
+    real: { litres: trip.litres, dist: trip.distance },
+    smooth: { litres: trip.smoothLitres, dist: trip.smoothDist },
+    calm: { litres: trip.calmLitres, dist: trip.calmDist },
+  }) : null;
+  const level = factors && driveQuality(factors.total);
+  if (level) {
+    // what to change: the extra fuel from accelerations and from speed, each shown when it is at least 1%
+    const pct = (x) => Math.round((x - 1) * 100);
+    const parts = [];
+    if (pct(factors.accel) > 0) parts.push(t('style.accel', { p: pct(factors.accel) }));
+    if (pct(factors.speed) > 0) parts.push(t('style.speed', { p: pct(factors.speed) }));
+    rows.unshift([t('sum.style'), t(`style.${level}`), 'style', { level, note: parts.length ? parts.join(', ') : t('style.same') }]);
+  }
   const detail = $('tree-detail');
   detail.hidden = true;
   detail.textContent = t('tree.detail', {
     litres: nf(trip.litres, 2), fuel: fuelLabel(settings.fuel).toLowerCase(), perLitre: nf(CO2_PER_LITRE[settings.fuel], 2),
     co2: nf(co2, 1), perYear: TREE_KG_PER_YEAR, time: treeTime(days), days: Math.round(days),
   });
-  $('summary').replaceChildren(...rows.map(([k, v, kind]) => {
+  $('summary').replaceChildren(...rows.map(([k, v, kind, extra]) => {
     const d = document.createElement('div');
     const dt = document.createElement('dt'); dt.textContent = k;
     const dd = document.createElement('dd'); dd.textContent = v;
     d.append(dt, dd);
+    if (kind === 'style') {
+      d.className = 'style';
+      d.dataset.level = extra.level;
+      const note = document.createElement('small'); note.textContent = extra.note;
+      dd.append(note);
+    }
     if (kind === 'tree') {
-      d.className = 'tappable';
+      d.className = 'tappable tree';
       d.tabIndex = 0;
       d.setAttribute('role', 'button');
       d.setAttribute('aria-expanded', 'false');
@@ -1235,8 +1292,6 @@ function endTrip({ replayOf = null } = {}) {
   const note = $('summary-note');
   note.hidden = !replayOf;
   note.textContent = replayOf ? t('sum.replay', { file: replayOf, vehicle: vehicleLabel(settings.vehicle), fuel: fuelLabel(settings.fuel), price: nf(settings.price, 3) }) : '';
-  trip = null;
-  show('summary');
 }
 
 // ---------- altitude profile (summary) ----------
@@ -1314,8 +1369,15 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------- boot ----------
 applyStatic();
+// the footer picker is on trip setup only: redraw the texts JS wrote there
+initFooter({
+  onLang: (l) => {
+    changeLang(l);
+    showSetup(); // recap, people
+    if (gpsOn) renderGpsReady(warmup.at(-1) ?? null);
+  },
+});
 form.lang.value = getLang();
-syncAverageLimits();
 if (settings) showSetup();
 else { $('settings-cancel').hidden = true; $('average-field').hidden = true; show('settings'); }
 

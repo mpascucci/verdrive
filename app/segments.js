@@ -66,16 +66,13 @@ export function segmentPaths(text, { w = 20, h = 36, t = 4.4, gap = 4.5, slant =
 }
 
 /**
- * A value laid out for a fixed "888.8" display (four digits and a point), so the figure never changes width:
- * 8.5 → "  8.5" (leading digits unlit), 35.8 → " 35.8", 123.4 → "123.4", 1234 → "123_4" (whole number, point
- * unlit), capped at 9999; no value (null, NaN, infinite or negative) → "---_-".
+ * A value laid out for an "88.8" display (three digits and a point): 8.5 → " 8.5" (leading digit unlit),
+ * 35.8 → "35.8". Larger values take an extra digit: 123.4 → "123.4", capped at 999.9. No value (null, NaN, infinite or negative) → "--_-".
  *
  * @param {number|null} value
  * @returns {string} for segmentPaths
  */
 export function fixedDigits(value) {
-  if (value == null || !Number.isFinite(value) || value < 0) return '---_-';
-  if (value < 999.95) return value.toFixed(1).padStart(5, ' ');
-  const n = String(Math.min(9999, Math.round(value)));
-  return `${n.slice(0, 3)}_${n.slice(3)}`;
+  if (value == null || !Number.isFinite(value) || value < 0) return '--_-';
+  return Math.min(999.9, value).toFixed(1).padStart(4, ' ');
 }

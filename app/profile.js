@@ -5,7 +5,7 @@ import {
   consumptionFromCo2, calibrateK, simulateCycle, REAL_WORLD_FACTOR,
 } from './model.js';
 import { WLTC3B_KMH } from './wltc.js';
-import { t } from './i18n.js';
+import { t, nf, parseDecimal, numText } from './i18n.js';
 
 /**
  * Litres of LPG burned per litre of gasoline for the same work: ~1.2 (energy ratio about 32 / 26 MJ/L,
@@ -23,6 +23,7 @@ export const FIELD_LIMITS = {
   ratedKw:      { min: 5,   max: 800,  unit: 'kW',    name: 'field.ratedKw' },
   co2:          { min: 20,  max: 600,  unit: 'g/km',  name: 'field.co2' },
   average:      { min: 1,   max: 40,   unit: 'L/100 km', name: 'field.average' },
+  cda:          { min: 0.3, max: 2.5,  unit: 'm²',    name: 'field.cda' },
 };
 /** Limits for the motorcycle form (scooters and motorcycles): lighter and less powerful than cars. */
 export const MOTO_LIMITS = {
@@ -30,6 +31,7 @@ export const MOTO_LIMITS = {
   g1:       { min: 40,  max: 600, unit: 'kg', name: 'field.g1' },
   ratedKw:  { min: 1,   max: 250, unit: 'kW', name: 'field.ratedKw' },
   maxLaden: { min: 180, max: 900, unit: 'kg', name: 'field.maxLadenMoto' },
+  cda:      { min: 0.15, max: 1.2, unit: 'm²', name: 'field.cda' },
 };
 /** The rider (75 kg). For L-category vehicles the mass in running order excludes the driver (Regulation (EU) 168/2013, Art. 5). */
 export const RIDER_MASS = 75;
@@ -45,14 +47,13 @@ export const COHERENCE_TOLERANCE = 5;
 const G_AGREE = (mass) => t('note.gAgree', { m: Math.round(mass) });
 const G1_NOTE = (mass) => t('note.g1', { m: Math.round(mass) });
 const G_MISSING = (mass) => t('note.gMissing', { m: Math.round(mass) });
+const CDA_NOTE = (cdA) => t('note.cda', { v: nf(cdA, 2) });
 export const BODY_LABELS = { hatchback: 'Hatchback', sedan: 'Sedan', estate: 'Estate', suv: 'SUV', van: 'Van' };
 
-/** Typed text or number to a number; empty, blank or junk gives null. */
-function num(x) {
-  if (x === null || x === undefined || String(x).trim() === '') return null;
-  const n = Number(String(x).replace(',', '.'));
-  return Number.isFinite(n) ? n : null;
-}
+/** Typed text or number to a number: "." or "," as decimal separator; blank gives null, junk gives NaN. */
+const num = parseDecimal;
+/** The range of a field for a message, with the language's decimal separator. */
+const rangeVars = ({ min, max, unit }, name) => ({ name, min: numText(min), max: numText(max), unit });
 
 /**
  * Check the user's own average consumption (L/100 km, optional). Blank is fine and gives `value: null`.
@@ -62,13 +63,11 @@ function num(x) {
  */
 export function checkAverage(x) {
   const value = num(x);
-  const { min, max, unit } = FIELD_LIMITS.average;
-  const name = t(FIELD_LIMITS.average.name);
-  if (value === null) {
-    const typed = x !== null && x !== undefined && String(x).trim() !== '';
-    return { value: null, error: typed ? t('err.numberRange', { name, min, max, unit }) : '' };
-  }
-  if (value < min || value > max) return { value, error: t('err.range', { name, min, max, unit }) };
+  const { min, max } = FIELD_LIMITS.average;
+  const vars = rangeVars(FIELD_LIMITS.average, t(FIELD_LIMITS.average.name));
+  if (value === null) return { value: null, error: '' };
+  if (Number.isNaN(value)) return { value: null, error: t('err.numberRange', vars) };
+  if (value < min || value > max) return { value, error: t('err.range', vars) };
   return { value, error: '' };
 }
 
@@ -85,6 +84,7 @@ export function checkAverage(x) {
 export function averageFromFuel({ litres, km }) {
   const l = num(litres);
   const d = num(km);
+  if (Number.isNaN(l) || Number.isNaN(d)) return { value: null, error: t('err.notNumber') };
   if (l === null || d === null) return { value: null, error: '' };
   if (!(l > 0) || !(d > 0)) return { value: null, error: t('err.aboveZero') };
   const value = Math.round((l / d) * 10000) / 100;
@@ -111,24 +111,26 @@ export function kFromAverage({ average, ...car }) {
  * The vehicle mass is G.1 + 75 kg, else G, else `presetMass` (the typical mass of the vehicle type); without any of
  * them, G is needed.
  *
- * @param {object} raw  g, maxLaden, displacement, ratedKw, body, startStop, co2
+ * @param {object} raw  g, maxLaden, displacement, ratedKw, body, startStop, co2, cda (optional drag area, m²)
  * @param {number|null} [presetMass]  typical mass of the vehicle type (kg), used when G is blank
  */
 export function checkAdvanced(raw, presetMass = null) {
   const values = {
     g: num(raw.g), g1: num(raw.g1), maxLaden: num(raw.maxLaden), displacement: num(raw.displacement),
-    ratedKw: num(raw.ratedKw), co2: num(raw.co2),
+    ratedKw: num(raw.ratedKw), co2: num(raw.co2), cda: num(raw.cda),
     body: raw.body, startStop: Boolean(raw.startStop),
   };
   const errors = {};
   for (const key of Object.keys(FIELD_LIMITS)) {
-    const { min, max, unit } = FIELD_LIMITS[key];
+    const { min, max } = FIELD_LIMITS[key];
     const name = t(FIELD_LIMITS[key].name);
     const v = values[key];
     if (v === null) {
       if (REQUIRED.includes(key) || (key === 'g' && presetMass === null && values.g1 === null)) errors[key] = t('err.needed', { name });
+    } else if (Number.isNaN(v)) {
+      errors[key] = t('err.numberRange', rangeVars(FIELD_LIMITS[key], name));
     } else if (v < min || v > max) {
-      errors[key] = t('err.range', { name, min, max, unit });
+      errors[key] = t('err.range', rangeVars(FIELD_LIMITS[key], name));
     }
   }
   if (!(raw.body in BODY_LABELS)) errors.body = t('err.body');
@@ -147,21 +149,22 @@ export function checkAdvanced(raw, presetMass = null) {
 /**
  * Check the motorcycle form: P.2 is required; G is optional (blank: estimated from the laden mass F, else the preset mass); all within `MOTO_LIMITS`.
  *
- * @param {object} raw  g, ratedKw, maxLaden
+ * @param {object} raw  g, ratedKw, maxLaden, cda (optional drag area, m²)
  * @param {number|null} [presetMass]  typical mass of the vehicle type with rider (kg), used when G and F are blank
  * @returns {{ values: object, errors: object }}
  */
 export function checkMoto(raw, presetMass = null) {
-  const values = { g: num(raw.g), g1: num(raw.g1), ratedKw: num(raw.ratedKw), maxLaden: num(raw.maxLaden) };
+  const values = { g: num(raw.g), g1: num(raw.g1), ratedKw: num(raw.ratedKw), maxLaden: num(raw.maxLaden), cda: num(raw.cda) };
   const errors = {};
   for (const key of Object.keys(MOTO_LIMITS)) {
-    const { min, max, unit } = MOTO_LIMITS[key];
+    const { min, max } = MOTO_LIMITS[key];
     const name = t(MOTO_LIMITS[key].name);
     if (values[key] === null) {
       // P.2 is needed. G is needed only if there is neither a laden mass nor a preset mass; the laden mass is optional.
       if (key === 'ratedKw' || (key === 'g' && values.g1 === null && values.maxLaden === null && presetMass === null)) errors[key] = t('err.needed', { name });
     }
-    else if (values[key] < min || values[key] > max) errors[key] = t('err.range', { name, min, max, unit });
+    else if (Number.isNaN(values[key])) errors[key] = t('err.numberRange', rangeVars(MOTO_LIMITS[key], name));
+    else if (values[key] < min || values[key] > max) errors[key] = t('err.range', rangeVars(MOTO_LIMITS[key], name));
   }
   return { values, errors };
 }
@@ -171,12 +174,13 @@ export function checkMoto(raw, presetMass = null) {
  * - mass = G + 75 kg rider (G excludes the driver for L-category vehicles); without G, the laden mass F gives
  *   F − 65 kg (F − 75 − 65 for the running-order mass, plus the rider back); without either, the preset mass;
  * - power clamp = 0.9 × P.2;
- * - drag area and idle fuel stay at the vehicle preset (`preset.cdA`, `preset.f0`): the engine capacity is not
- *   used because idle fuel does not scale with it for small engines;
+ * - drag area: the typed CdA if given, else the vehicle preset (`preset.cdA`);
+ * - idle fuel stays at the vehicle preset (`preset.f0`): the engine capacity is not used because idle fuel
+ *   does not scale with it for small engines;
  * - k comes from the user's own average consumption when given, else stays at the Quick value.
  *
  * @param {object} p
- * @param {object} p.raw       g, ratedKw
+ * @param {object} p.raw       g, ratedKw, cda
  * @param {{cdA:number, f0:number}} p.preset  the vehicle preset
  * @param {number} p.tier1K    Quick k (fallback)
  * @param {number|null} [p.average]  the user's own average (L/100 km), already checked
@@ -200,7 +204,8 @@ export function buildAdvancedMoto({ raw, preset, tier1K, average = null, presetM
   else if (values.maxLaden !== null) { m = values.maxLaden - PASSENGER_MASS; massNote = F_ESTIMATE(m); }
   else { m = presetMass; massNote = G_MISSING(m); }
   const pMax = maxPowerFromRated({ ratedKw: values.ratedKw });
-  const car = { m, cdA: preset.cdA, f0: preset.f0, pMax };
+  const cdA = values.cda ?? preset.cdA;
+  const car = { m, cdA, f0: preset.f0, pMax };
   let k = tier1K;
   let kSource = 'tier1';
   let note = t('note.motoAverage');
@@ -210,7 +215,7 @@ export function buildAdvancedMoto({ raw, preset, tier1K, average = null, presetM
     else { k = solved; kSource = 'average'; note = ''; }
   }
   return {
-    profile: { ...car, k, kSource, startStop: false, official: kSource === 'average' ? average : null, testMass: m, category: 'M', note: [massNote, note].filter(Boolean).join(' ') },
+    profile: { ...car, k, kSource, startStop: false, official: kSource === 'average' ? average : null, testMass: m, category: 'M', note: [massNote, values.cda !== null ? CDA_NOTE(cdA) : '', note].filter(Boolean).join(' ') },
   };
 }
 
@@ -233,7 +238,8 @@ export function buildAdvanced({ raw, fuel, tier1K, average = null, presetMass = 
   const { values, errors } = checkAdvanced(raw, presetMass);
   if (Object.keys(errors).length) return { errors };
 
-  const cdA = dragAreaFromBody({ body: values.body });
+  // Drag area: the typed CdA (from the maker or the web) when given, else the typical value for the body type.
+  const cdA = values.cda ?? dragAreaFromBody({ body: values.body });
   const f0 = idleFromDisplacement({ displacement: values.displacement });
   const pMax = maxPowerFromRated({ ratedKw: values.ratedKw });
   const category = values.body === 'van' ? 'N' : 'M';
@@ -277,7 +283,7 @@ export function buildAdvanced({ raw, fuel, tier1K, average = null, presetMass = 
   return {
     profile: {
       m: g, cdA, f0, pMax, k, kSource, startStop: values.startStop,
-      official, testMass: mTest, category, note: [gGiven ? (values.g1 !== null ? (values.g !== null ? G_AGREE(g) : G1_NOTE(g)) : '') : G_MISSING(g), values.maxLaden === null ? F_MISSING() : '', note].filter(Boolean).join(' '),
+      official, testMass: mTest, category, note: [gGiven ? (values.g1 !== null ? (values.g !== null ? G_AGREE(g) : G1_NOTE(g)) : '') : G_MISSING(g), values.maxLaden === null ? F_MISSING() : '', values.cda !== null ? CDA_NOTE(cdA) : '', note].filter(Boolean).join(' '),
     },
   };
 }

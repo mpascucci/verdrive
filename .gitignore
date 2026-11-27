@@ -35,3 +35,9 @@ logs/
 
 # Local developer tools (log replay page): kept on this computer only
 tools/
+
+# Local dev server and element inspector (pwa-setup skill): never committed
+dev/
+
+# Cloudflare deploy: which files to leave out of the upload (kept local, like wrangler.jsonc)
+app/.assetsignore

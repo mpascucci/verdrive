@@ -53,14 +53,15 @@
         </label>
         <label class="field">
           <span data-i18n="set.price">Price (€/L)</span>
-          <input id="price" name="price" type="number" inputmode="decimal" min="0.1" max="10" step="0.001" required>
+          <input id="price" name="price" type="text" inputmode="decimal" autocomplete="off" required>
+          <small class="err" id="price-err"></small>
         </label>
       </div>
 
       <div class="field" id="average-field">
         <label for="average"><span data-i18n="set.average">Average consumption (L/100 km), optional</span></label>
         <div class="input-row">
-          <input id="average" name="average" type="number" inputmode="decimal" min="1" max="40" step="any">
+          <input id="average" name="average" type="text" inputmode="decimal" autocomplete="off">
           <button type="button" id="calc-open" class="ghost" data-i18n="set.calc">Calc</button>
         </div>
         <small class="err" id="average-err"></small>
@@ -82,35 +83,35 @@
     <form id="advanced-form" novalidate>
       <label class="field">
         <span data-i18n="adv.g">G: mass in running order (kg), optional</span>
-        <input name="g" type="number" inputmode="decimal" min="40" max="4000" step="any">
+        <input name="g" type="text" inputmode="decimal" autocomplete="off">
         <small data-i18n="adv.gHint">Used only if G.1 is blank. If both are blank, the typical mass of your vehicle type is used.</small>
         <small class="err" data-for="g"></small>
       </label>
       <label class="field">
         <span data-i18n="adv.g1">G.1: empty mass (kg), optional</span>
-        <input name="g1" type="number" inputmode="decimal" min="40" max="3925" step="any">
+        <input name="g1" type="text" inputmode="decimal" autocomplete="off">
         <small data-i18n="adv.g1Hint">G.1 is G without the driver. It is used first; G is the fallback.</small>
         <small class="err" data-for="g1"></small>
       </label>
       <label class="field">
         <span id="f-label">F.1: maximum laden mass (kg), optional</span>
-        <input name="maxLaden" type="number" inputmode="decimal" min="100" max="8000" step="any">
+        <input name="maxLaden" type="text" inputmode="decimal" autocomplete="off">
         <small id="f-hint">If there is no F.1, use F.2.</small>
         <small class="err" data-for="maxLaden"></small>
       </label>
       <label class="field" data-cars>
         <span data-i18n="adv.p1">P.1: engine capacity (cm³)</span>
-        <input name="displacement" type="number" inputmode="decimal" min="400" max="8500" step="1">
+        <input name="displacement" type="text" inputmode="decimal" autocomplete="off">
         <small class="err" data-for="displacement"></small>
       </label>
       <label class="field">
         <span data-i18n="adv.p2">P.2: maximum power (kW)</span>
-        <input name="ratedKw" type="number" inputmode="decimal" min="5" max="800" step="0.1">
+        <input name="ratedKw" type="text" inputmode="decimal" autocomplete="off">
         <small class="err" data-for="ratedKw"></small>
       </label>
       <label class="field" data-cars>
         <span data-i18n="adv.v7">V.7: CO₂ emissions (g/km)</span>
-        <input name="co2" type="number" inputmode="decimal" min="20" max="600" step="0.1">
+        <input name="co2" type="text" inputmode="decimal" autocomplete="off">
         <small data-i18n="adv.v7Hint">Tunes the fuel use of your car. Leave blank if the certificate has no WLTP value.</small>
         <small class="err" data-for="co2"></small>
       </label>
@@ -126,6 +127,13 @@
         </div>
         <small class="err" data-for="body"></small>
       </fieldset>
+
+      <label class="field">
+        <span data-i18n="adv.cda">CdA: drag area (m²), optional</span>
+        <input name="cda" type="text" inputmode="decimal" autocomplete="off">
+        <small data-i18n="adv.cdaHint">Not on the certificate; search your model online. If you find the drag coefficient Cd and the frontal area A, multiply them (e.g. 0.30 × 2.2 m² = 0.66). Blank: the typical value for your vehicle type.</small>
+        <small class="err" data-for="cda"></small>
+      </label>
 
       <div class="rows" data-cars style="margin-bottom:1.25rem">
         <label class="row-item switch">
@@ -165,16 +173,40 @@
       <h2 data-i18n="calc.title">Average consumption</h2>
       <label class="field">
         <span data-i18n="calc.litres">Fuel used (litres)</span>
-        <input id="calc-litres" type="number" inputmode="decimal" min="0" step="any">
+        <input id="calc-litres" type="text" inputmode="decimal" autocomplete="off">
       </label>
       <label class="field">
         <span data-i18n="calc.km">Distance covered (km)</span>
-        <input id="calc-km" type="number" inputmode="decimal" min="0" step="any">
+        <input id="calc-km" type="text" inputmode="decimal" autocomplete="off">
       </label>
       <p id="calc-result" class="result" role="status"></p>
       <button type="submit" id="calc-use" class="primary" disabled data-i18n="calc.use">Use this value</button>
       <button type="button" id="calc-cancel" class="ghost" data-i18n="common.cancel">Cancel</button>
     </form>
+  </dialog>
+
+  <!-- footer dialogs (footer.js) -->
+  <dialog id="share-dialog" class="foot-dialog" aria-labelledby="share-title">
+    <h2 id="share-title" data-i18n="share.title">Share VerDrive</h2>
+    <img id="share-qr" src="share-qr.svg" alt="" width="200" height="200">
+    <button type="button" id="share-copy"><span data-i18n="share.copy">Copy link</span></button>
+    <button type="button" id="share-native" class="primary" hidden data-i18n="share.open">Share</button>
+    <button type="button" id="share-close" class="ghost" data-i18n="common.close">Close</button>
+  </dialog>
+
+  <dialog id="credits-dialog" class="foot-dialog" aria-labelledby="credits-title">
+    <div id="credits-body" class="credits-body" tabindex="0" data-i18n="credits.loading">Loading…</div>
+    <button type="button" id="credits-close" class="ghost" autofocus data-i18n="common.close">Close</button>
+  </dialog>
+
+  <dialog id="install-dialog" class="foot-dialog" aria-labelledby="install-title">
+    <h2 id="install-title" data-i18n="install.title">Install VerDrive</h2>
+    <ol class="install-steps">
+      <li><span data-i18n="install.ios1">Tap the Share button</span> <svg class="ios-share" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16"/><path d="M12 14V3M8 6.5 12 3l4 3.5"/></svg></li>
+      <li data-i18n="install.ios2">Tap “Show more”</li>
+      <li data-i18n="install.ios3">Tap “Add to Home Screen”</li>
+    </ol>
+    <button type="button" id="install-close" class="ghost" data-i18n="common.close">Close</button>
   </dialog>
 
   <!-- 2. Trip setup (every start) -->
@@ -196,7 +228,7 @@
           <option value="lpg" data-i18n="fuel.lpgShort">LPG</option>
         </select>
         <label class="price-wrap">
-          <input id="setup-price" class="price-input" type="number" inputmode="decimal" min="0.1" max="10" step="0.001" aria-label="Fuel price, euros per litre" data-i18n-aria="setup.priceAria">
+          <input id="setup-price" class="price-input" type="text" inputmode="decimal" autocomplete="off" aria-label="Fuel price, euros per litre" data-i18n-aria="setup.priceAria">
           <span>€/L</span>
         </label>
       </div>
@@ -237,6 +269,14 @@
     <p id="replay-err" class="note err" role="alert" hidden></p>
     <!-- the running version: hidden; a triple tap on the page background shows it -->
     <p id="version" class="version" hidden></p>
+    <!-- footer line (footer.js), on trip setup only: language picker first, then Share, Credits, Buy me a coffee, Install (always last, hidden once installed) -->
+    <footer class="foot">
+      <span class="foot-lang"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.7 5.7 3.7 9s-1.2 6.3-3.7 9c-2.5-2.7-3.7-5.7-3.7-9S9.5 5.7 12 3z"/></svg><span id="foot-lang-code" aria-hidden="true">EN</span><select id="foot-lang" aria-label="Language" data-i18n-aria="set.language"></select></span>
+      <span class="foot-share"><button type="button" id="share-open" class="foot-btn" aria-haspopup="dialog" aria-label="Share" data-i18n-aria="share.open"><span class="share-label" data-i18n="share.open">Share</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button></span>
+      <span class="foot-credits"><button type="button" id="credits-open" class="foot-btn" aria-haspopup="dialog" data-i18n="credits.open">Credits</button></span>
+      <span class="foot-coffee"><a href="https://buymeacoffee.com/mpascucci" target="_blank" rel="noopener">&#9749; <span class="cof-long" data-i18n="coffee.long">Buy me a coffee</span><span class="cof-short" data-i18n="coffee.short">coffee?</span></a></span>
+      <span class="foot-install"><button type="button" id="install-open" class="foot-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 20h14"/></svg><span data-i18n="install.open">Install</span></button></span>
+    </footer>
   </main>
 
   <!-- 3. Trip -->
@@ -317,17 +357,24 @@
 
   <!-- 4. Summary -->
   <main id="screen-summary" class="screen" hidden>
-    <h1 data-i18n="sum.title">Trip summary</h1>
-    <p id="summary-note" class="summary-note" hidden></p>
-    <!-- altitude along the road, coloured like the dial; drawn by drawProfile in app.js -->
-    <figure id="profile" class="profile" hidden>
-      <figcaption data-i18n="sum.profile">Altitude profile</figcaption>
-      <svg id="profile-svg" viewBox="0 0 320 132" role="img" aria-label="Altitude profile"></svg>
-    </figure>
-    <dl id="summary" class="summary"></dl>
-    <p id="tree-detail" class="tree-detail" hidden></p>
-    <button type="button" id="export-log" class="ghost" hidden data-i18n="sum.export">Export log</button>
-    <button type="button" id="done" class="primary big" data-i18n="sum.newTrip">New trip</button>
+    <!-- two wrappers: invisible in portrait (display: contents), the two columns in landscape -->
+    <div class="sum-main">
+      <h1 data-i18n="sum.title">Trip summary</h1>
+      <p id="summary-note" class="summary-note" hidden></p>
+      <!-- altitude along the road, coloured like the dial; drawn by drawProfile in app.js -->
+      <figure id="profile" class="profile" hidden>
+        <figcaption data-i18n="sum.profile">Altitude profile</figcaption>
+        <svg id="profile-svg" viewBox="0 0 320 132" role="img" aria-label="Altitude profile"></svg>
+      </figure>
+    </div>
+    <div class="sum-side">
+      <dl id="summary" class="summary"></dl>
+      <p id="tree-detail" class="tree-detail" hidden></p>
+      <div class="sum-actions">
+        <button type="button" id="export-log" class="ghost" hidden data-i18n="sum.export">Export log</button>
+        <button type="button" id="done" class="primary big" data-i18n="sum.newTrip">New trip</button>
+      </div>
+    </div>
   </main>
 
 

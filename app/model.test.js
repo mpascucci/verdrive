@@ -1,7 +1,7 @@
 // Run with: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tractivePower, fuelRate, perHundredKm, smooth, toCost, slopeFromAltitude, smoothSlope, co2FromFuel, treeDays, slopeLength, consumptionFromCo2, idleFromDisplacement, maxPowerFromRated, dragAreaFromBody, testMass, simulateCycle, calibrateK, altitudeStep, REAL_WORLD_FACTOR, CDA_BY_BODY, CO2_PER_LITRE, TREE_KG_PER_YEAR } from './model.js';
+import { tractivePower, fuelRate, perHundredKm, smooth, toCost, slopeFromAltitude, smoothSlope, co2FromFuel, treeDays, slopeLength, consumptionFromCo2, idleFromDisplacement, maxPowerFromRated, dragAreaFromBody, testMass, simulateCycle, calibrateK, altitudeStep, driveQuality, styleFactors, CALM_TAU, QUALITY_ECO, QUALITY_GOOD, REAL_WORLD_FACTOR, CDA_BY_BODY, CO2_PER_LITRE, TREE_KG_PER_YEAR } from './model.js';
 
 import { WLTC3B_KMH } from './wltc.js';
 
@@ -196,9 +196,9 @@ test('toCost: litres × price, also for L/h → €/h', () => {
 
 // ---- slopeFromAltitude ----
 
-test('slopeFromAltitude: 5 m climb over 100 m gives θ = asin(0.05) ≈ 2.87°', () => {
+test('slopeFromAltitude: 5 m climb over 100 m gives θ = atan(0.05) ≈ 2.87°', () => {
   const theta = slopeFromAltitude({ dh: 5, dist: 100 });
-  assert.ok(Math.abs(theta - Math.asin(0.05)) < 1e-12);
+  assert.ok(Math.abs(theta - Math.atan(0.05)) < 1e-12);
   assert.ok(Math.abs(theta * 180 / Math.PI - 2.866) < 0.01);
 });
 
@@ -215,11 +215,11 @@ test('slopeFromAltitude: flat gives 0', () => {
 
 test('slopeFromAltitude: too short a distance gives null (noise, no answer yet)', () => {
   assert.equal(slopeFromAltitude({ dh: 3, dist: 10 }), null);
-  assert.equal(slopeFromAltitude({ dh: 3, dist: 49.9 }), null);
+  assert.equal(slopeFromAltitude({ dh: 3, dist: 31.9 }), null);
 });
 
 test('slopeFromAltitude: exactly minDist is accepted', () => {
-  assert.notEqual(slopeFromAltitude({ dh: 2, dist: 50 }), null);
+  assert.notEqual(slopeFromAltitude({ dh: 2, dist: 32 }), null);
 });
 
 test('slopeFromAltitude: zero, negative or NaN distance gives null', () => {
@@ -229,20 +229,20 @@ test('slopeFromAltitude: zero, negative or NaN distance gives null', () => {
 });
 
 test('slopeFromAltitude: an impossible altitude jump is clamped to ±25%', () => {
-  const limit = Math.asin(0.25);
+  const limit = Math.atan(0.25);
   assert.ok(Math.abs(slopeFromAltitude({ dh: 30, dist: 60 }) - limit) < 1e-12);
   assert.ok(Math.abs(slopeFromAltitude({ dh: -30, dist: 60 }) + limit) < 1e-12);
-  assert.ok(Math.abs(slopeFromAltitude({ dh: 80, dist: 60 }) - limit) < 1e-12); // |dh| > dist: asin would be NaN
+  assert.ok(Math.abs(slopeFromAltitude({ dh: 80, dist: 60 }) - limit) < 1e-12); // |dh| > dist: the clamp keeps the angle at the limit
 });
 
 test('slopeFromAltitude: a real 20% climb is not clamped by the default limit', () => {
   const theta = slopeFromAltitude({ dh: 20, dist: 100 });
-  assert.ok(Math.abs(theta - Math.asin(0.20)) < 1e-12);
+  assert.ok(Math.abs(theta - Math.atan(0.20)) < 1e-12);
 });
 
 test('slopeFromAltitude: minDist and maxGrade can be changed', () => {
   assert.notEqual(slopeFromAltitude({ dh: 1, dist: 20, minDist: 10 }), null);
-  assert.ok(Math.abs(slopeFromAltitude({ dh: 20, dist: 100, maxGrade: 0.1 }) - Math.asin(0.1)) < 1e-12);
+  assert.ok(Math.abs(slopeFromAltitude({ dh: 20, dist: 100, maxGrade: 0.1 }) - Math.atan(0.1)) < 1e-12);
 });
 
 test('slopeFromAltitude feeds tractivePower: 5 m over 100 m adds ≈ 27.3 kW for the SUV at 100 km/h', () => {
@@ -585,4 +585,72 @@ test('altitudeStep: missing altitude gives none; a bad step counts as 0 m', () =
 test('altitudeStep: maxGrade and noise are parameters', () => {
   assert.equal(altitudeStep({ prevAlt: 0, alt: 5, step: 10, maxGrade: 0.5 }), 'move'); // limit 8 m
   assert.equal(altitudeStep({ prevAlt: 0, alt: 2, step: 0, noise: 1 }), 'jump');
+});
+
+test('slopeFromAltitude: the distance is horizontal (GPS speed), so dh/dist is tanθ and sinθ is rise over the road length', () => {
+  const theta = slopeFromAltitude({ dh: 20, dist: 100 }); // a 20% road-sign grade
+  assert.ok(Math.abs(Math.tan(theta) - 0.20) < 1e-12);
+  assert.ok(Math.abs(Math.sin(theta) - 20 / Math.hypot(20, 100)) < 1e-12); // 0.196, not 0.20
+});
+
+// ---- driveQuality ----
+test('driveQuality: eco up to 1.10, good up to 1.25, brisk above; bad input gives null', () => {
+  assert.equal(driveQuality(0.97), 'eco');   // a calm stretch can use a little less than the shadow
+  assert.equal(driveQuality(1.05), 'eco');
+  assert.equal(driveQuality(QUALITY_ECO), 'eco');
+  assert.equal(driveQuality(1.16), 'good');
+  assert.equal(driveQuality(QUALITY_GOOD), 'good');
+  assert.equal(driveQuality(1.31), 'brisk');
+  for (const bad of [NaN, Infinity, 0, -1, null, undefined]) assert.equal(driveQuality(bad), null);
+});
+
+test('driveQuality: against a calm shadow (speed smoothed with CALM_TAU), hard stop-and-go is brisk, gentle is good, steady is eco', () => {
+  const car = { m: 1500, cdA: 0.65 };
+  const fuel = (v, a) => fuelRate({ p: tractivePower({ v, a, ...car }), v, f0: 0.8, k: 0.45, pMax: 90000 });
+  const drive = (speedAt) => {
+    let vPrev = speedAt(0), vS = vPrev, vSPrev = vPrev, real = 0, calm = 0, d = 0, dS = 0;
+    for (let t = 1; t <= 600; t++) {
+      const v = speedAt(t);
+      real += fuel(v, v - vPrev); d += v; vPrev = v;
+      vS = smooth({ prev: vS, value: v, dt: 1, tau: CALM_TAU });
+      calm += fuel(vS, vS - vSPrev); dS += vS; vSPrev = vS;
+    }
+    return (real / d) / (calm / dS);
+  };
+  // stop-and-go between 29 and 72 km/h: speed up at `up` m/s², hold `hold` s, brake at `down` m/s², hold
+  const cycle = (up, down, hold) => {
+    const period = 12 / up + hold + 12 / down + hold;
+    return (t) => {
+      const s = t % period;
+      if (s < 12 / up) return 8 + up * s;
+      if (s < 12 / up + hold) return 20;
+      if (s < 12 / up + hold + 12 / down) return 20 - down * (s - 12 / up - hold);
+      return 8;
+    };
+  };
+  assert.ok(Math.abs(drive(() => 25) - 1) < 1e-9);                         // steady 90 km/h: same as calm
+  assert.equal(driveQuality(drive(cycle(2.5, 3, 5))), 'brisk');            // hard accelerations and brakings
+  assert.equal(driveQuality(drive(cycle(0.8, 1, 10))), 'good');            // the same stops, taken gently
+  assert.equal(driveQuality(drive((t) => 14 + 3 * Math.sin(t / 30))), 'eco'); // slow swells over a minute
+});
+
+test('styleFactors: the two causes multiply to the total; an empty total gives null', () => {
+  const f = styleFactors({ real: { litres: 1.3, dist: 10000 }, smooth: { litres: 1.0, dist: 10000 }, calm: { litres: 0.8, dist: 9000 } });
+  assert.ok(Math.abs(f.accel - 1.3) < 1e-12);                   // same distance: 1.3 / 1.0
+  assert.ok(Math.abs(f.speed - (1.0 / 10000) / (0.8 / 9000)) < 1e-12);
+  assert.ok(Math.abs(f.total - f.accel * f.speed) < 1e-12);
+  assert.equal(styleFactors({ real: { litres: 1, dist: 0 }, smooth: { litres: 1, dist: 1 }, calm: { litres: 1, dist: 1 } }), null);
+  assert.equal(styleFactors({ real: { litres: 1, dist: 1 }, smooth: { litres: 0, dist: 1 }, calm: { litres: 1, dist: 1 } }), null);
+});
+
+test('styleFactors: driving above the cap costs fuel; below it the speed factor is 1', () => {
+  const car = { m: 1500, cdA: 0.65 };
+  const fuel = (v) => fuelRate({ p: tractivePower({ v, a: 0, ...car }), v, f0: 0.8, k: 0.45, pMax: 90000 });
+  const at = (v, cap) => styleFactors({
+    real: { litres: fuel(v), dist: v }, smooth: { litres: fuel(v), dist: v }, calm: { litres: fuel(Math.min(v, cap)), dist: Math.min(v, cap) },
+  });
+  assert.equal(at(25, 110 / 3.6).speed, 1);                     // 90 km/h under a 110 cap: no speed cost
+  const fast = at(130 / 3.6, 110 / 3.6);                          // steady 130 km/h against a 110 cap
+  assert.ok(fast.speed > 1.15 && fast.speed < 1.35, String(fast.speed));
+  assert.equal(fast.accel, 1);                                    // steady: no acceleration cost
 });

@@ -299,3 +299,39 @@ test('coherence: not applied to motorcycles, whose G excludes the rider (G.1 sti
   assert.equal(r.errors, undefined);
   assert.equal(r.profile.m, 265);
 });
+
+test('CdA (car): optional; when typed it replaces the body-type value, is range-checked, and shifts the calibrated k', () => {
+  const base = buildAdvanced({ raw: RAW, fuel: 'gasoline', tier1K: 0.45 }).profile;
+  assert.equal(base.cdA, 0.65);
+  assert.ok(!base.note.includes('0.62'));
+  const typed = buildAdvanced({ raw: { ...RAW, cda: '0,62' }, fuel: 'gasoline', tier1K: 0.45 }).profile;
+  assert.equal(typed.cdA, 0.62);
+  assert.ok(typed.note.includes('0.62'), typed.note);
+  // less drag for the same official figure: the engine constant must be a little higher
+  assert.ok(typed.k > base.k);
+  // the calibration still reproduces the target with the typed CdA
+  assert.ok(Math.abs(simulatedWltp(typed) - consumptionFromCo2({ co2: 120, fuel: 'gasoline' }) * REAL_WORLD_FACTOR) < 1e-6);
+  assert.ok(checkAdvanced({ ...RAW, cda: 0.1 }).errors.cda);
+  assert.ok(checkAdvanced({ ...RAW, cda: 5 }).errors.cda);
+  assert.deepEqual(checkAdvanced({ ...RAW, cda: '' }).errors, {});
+});
+
+test('CdA (moto): a typed value replaces the preset drag area, with its own limits', () => {
+  const p = buildAdvancedMoto({ raw: { g: 190, ratedKw: 70, cda: 0.48 }, preset: MOTO_PRESET, tier1K: 0.45 }).profile;
+  assert.equal(p.cdA, 0.48);
+  assert.ok(p.note.includes('0.48'), p.note);
+  assert.equal(buildAdvancedMoto({ raw: { g: 190, ratedKw: 70, cda: '' }, preset: MOTO_PRESET, tier1K: 0.45 }).profile.cdA, 0.35);
+  assert.ok(checkMoto({ g: 190, ratedKw: 70, cda: 2 }).errors.cda);
+  assert.ok(checkMoto({ g: 190, ratedKw: 70, cda: 0.1 }).errors.cda);
+});
+
+test('two decimal separators are an error, not a blank field (cars, motorcycles, average, calculator)', () => {
+  assert.ok(checkAdvanced({ ...RAW, cda: '0,6,2' }).errors.cda);
+  assert.ok(checkAdvanced({ ...RAW, ratedKw: '1.234,5' }).errors.ratedKw);
+  assert.equal(checkAdvanced({ ...RAW, cda: '0.62' }).values.cda, 0.62);
+  assert.ok(checkMoto({ g: '1,9,0', ratedKw: 70 }).errors.g);
+  assert.ok(checkAverage('5,5,5').error);
+  assert.equal(checkAverage('5,5').value, 5.5);
+  assert.ok(averageFromFuel({ litres: '40,1,2', km: 600 }).error);
+  assert.equal(averageFromFuel({ litres: '40,5', km: '600.0' }).value, 6.75);
+});
