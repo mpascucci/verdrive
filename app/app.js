@@ -11,7 +11,7 @@ import { binProfile, extremes } from './elevation.js';
 import { startUpdates, reloadIfUpdateWaiting } from './update.js';
 import { buildAdvanced, buildAdvancedMoto, simulatedWltp, checkAverage, kFromAverage, averageFromFuel } from './profile.js';
 import { normalizeStore, settingsFor, activeSettings, saveVehicle, setActive, recentVehicles } from './vehicles.js';
-import { normalizePresets, savePreset, deletePreset, getPreset, presetNames, cleanName } from './presets.js';
+import { normalizePresets, savePreset, deletePreset, getPreset, presetNames, cleanName, markLoaded, nameForType } from './presets.js';
 import { startLog, stopLog, logAdd, logActive, hasSavedLogs, exportLatestLog, parseLog } from './triplog.js';
 import { t, nf, loadLang, saveLang, getLang, applyStatic, parseDecimal, numText } from './i18n.js';
 import { initFooter, renderFooter } from './footer.js';
@@ -282,11 +282,9 @@ function presetMsg(text, error = false) {
 function syncPresetButtons() {
   $('preset-delete').disabled = !getPreset(presets, presetInput.value);
 }
-// The name of the last preset saved or loaded, while the active vehicle type is still its type; else ''.
-function activePresetName() {
-  const last = presets.last && getPreset(presets, presets.last);
-  return last && settings && last.vehicle === settings.vehicle ? presets.last : '';
-}
+// A vehicle type's name: the preset its settings were last saved or loaded from; else ''.
+const presetNameFor = (type) => nameForType(presets, type);
+const activePresetName = () => (settings ? presetNameFor(settings.vehicle) : '');
 function renderPresets() {
   $('preset-list').replaceChildren(...presetNames(presets).map((n) => { const o = document.createElement('option'); o.value = n; return o; }));
   presetInput.value = activePresetName();
@@ -298,7 +296,7 @@ presetInput.addEventListener('change', () => {
   const p = getPreset(presets, presetInput.value);
   if (!p) return;
   presetInput.value = cleanName(presetInput.value);
-  presets = { ...presets, last: presetInput.value };
+  presets = markLoaded(presets, presetInput.value);
   persistPresets();
   saveSettings(p); // the vehicle type takes the preset's settings, certificate fields included
   settings = activeSettings(store);
@@ -452,7 +450,7 @@ function renderVehicleSwitch() {
     input.value = id;
     input.checked = id === settings.vehicle;
     const span = document.createElement('span');
-    span.textContent = vehicleLabel(id);
+    span.textContent = presetNameFor(id) || vehicleLabel(id); // the vehicle's name if it has one
     label.append(input, span);
     return label;
   }));

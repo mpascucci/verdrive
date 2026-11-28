@@ -1,14 +1,14 @@
 // Run with: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanName, normalizePresets, savePreset, deletePreset, getPreset, presetNames, NAME_MAX } from './presets.js';
+import { cleanName, normalizePresets, savePreset, deletePreset, getPreset, presetNames, markLoaded, nameForType, NAME_MAX } from './presets.js';
 
 const RULES = {
   vehicles: ['city', 'sedan', 'suv', 'van', 'scooter', 'moto'],
   fuels: ['gasoline', 'diesel', 'lpg'],
   gasolineOnly: (v) => v === 'scooter' || v === 'moto',
 };
-const EMPTY = { last: null, presets: {} };
+const EMPTY = { last: null, byType: {}, presets: {} };
 const PANDA = { vehicle: 'city', fuel: 'lpg', price: 0.75, average: 6.1, advanced: { g: '1050' } };
 
 test('cleanName: trims, collapses spaces, caps the length', () => {
@@ -39,7 +39,7 @@ test('savePreset: stores a copy under the clean name, replaces the same name, se
   s = savePreset(s, 'Panda', { vehicle: 'city', fuel: 'gasoline', price: 1.9 });
   assert.deepEqual(s.presets.Panda, { vehicle: 'city', fuel: 'gasoline', price: 1.9 });
   assert.equal(savePreset(s, '   ', PANDA), s);
-  assert.deepEqual(EMPTY, { last: null, presets: {} }); // input not changed
+  assert.deepEqual(EMPTY, { last: null, byType: {}, presets: {} }); // input not changed
 });
 
 test('getPreset / deletePreset', () => {
@@ -55,4 +55,20 @@ test('getPreset / deletePreset', () => {
 test('presetNames: sorted ignoring case', () => {
   const s = ['b', 'A', 'c'].reduce((acc, n) => savePreset(acc, n, PANDA), EMPTY);
   assert.deepEqual(presetNames(s), ['A', 'b', 'c']);
+});
+
+test('byType: the name per vehicle type follows saves, loads and deletes', () => {
+  let s = savePreset(EMPTY, 'Panda', PANDA);
+  s = savePreset(s, 'Panda 2', { ...PANDA, price: 1 });
+  assert.equal(nameForType(s, 'city'), 'Panda 2');
+  assert.equal(nameForType(s, 'van'), '');
+  s = markLoaded(s, 'Panda');
+  assert.equal(nameForType(s, 'city'), 'Panda');
+  assert.equal(s.last, 'Panda');
+  assert.equal(markLoaded(s, 'nope'), s);
+  s = deletePreset(s, 'Panda');
+  assert.equal(nameForType(s, 'city'), '');
+  // a stored set without byType takes it from last
+  const old = normalizePresets({ last: 'Panda', presets: { Panda: PANDA } }, RULES);
+  assert.equal(nameForType(old, 'city'), 'Panda');
 });
