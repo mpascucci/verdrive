@@ -339,11 +339,11 @@ $$
 v_{\text{calm}}(t) = \min\Big(\text{smooth}\big(v(t),\ \tau = 5\ \text{s}\big),\ v_{\text{cap}}\Big)
 $$
 
-with $v_{\text{cap}}$ = 110 km/h for cars and motorcycles, and 90 km/h for scooters, which are meant for town and the roads around it. A sharp acceleration from 30 to 70 km/h in 5 s becomes, for the calm driver, a gradual one over about 15 s; a long stop stays a stop. The calm driver's acceleration is the rate of change of $v_{\text{calm}}$, and its fuel is computed with the same model, the same slopes and the same A/C load as the real drive. So hills cancel out: both drivers climb the same ones.
+with $v_{\text{cap}}$ = 90 km/h for cars and motorcycles, and 50 km/h for scooters, which are meant for town and the roads around it. A sharp acceleration from 30 to 70 km/h in 5 s becomes, for the calm driver, a gradual one over about 15 s; a long stop stays a stop. The calm driver's acceleration is the rate of change of $v_{\text{calm}}$, and its fuel is computed with the same model, the same slopes and the same A/C load as the real drive. So hills cancel out: both drivers climb the same ones.
 
 **Two ways to waste fuel.**
 - **Hard accelerations.** The kinetic energy put in during an acceleration, $\frac{1}{2} m v^2$, is mostly lost in the brakes at the next stop, and short bursts of high power are what the calm driver avoids.
-- **High speed.** Air drag grows with $v^2$, so above the cap every kilometre costs more: cruising at 130 km/h instead of 110 km/h takes about 20–30% more fuel per kilometre.
+- **High speed.** Air drag grows with $v^2$, so above the cap every kilometre costs more: cruising at 130 km/h instead of 90 km/h takes about 40–60% more fuel per kilometre.
 
 The app measures the two separately, with a second shadow that is smoothed but not capped. Per kilometre:
 

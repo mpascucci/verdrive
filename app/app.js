@@ -22,13 +22,13 @@ const fuelLabel = (id) => t(`fuel.${id}`);
 
 // ---------- Tier 1 presets (gasoline), from ROADMAP.md ----------
 const PRESETS = {
-  // calmMax: efficient cruising speed (km/h) of the calm driver behind the driving style (developer's choice, 2026-11-27)
-  city:  { label: 'City car', m: 1100, cdA: 0.60, f0: 0.6, pAc: 1000, calmMax: 110 },
-  sedan: { label: 'Sedan',    m: 1500, cdA: 0.65, f0: 0.8, pAc: 1500, calmMax: 110 },
-  suv:   { label: 'SUV',      m: 2000, cdA: 0.90, f0: 1.0, pAc: 2000, calmMax: 110 },
-  van:   { label: 'Van',      m: 2500, cdA: 1.10, f0: 1.2, pAc: 2000, calmMax: 110 },
-  scooter: { label: 'Scooter', m: 175, cdA: 0.40, f0: 0.25, pAc: 0, gasolineOnly: true, calmMax: 90 }, // meant for town and around it
-  moto:    { label: 'Motorcycle', m: 300, cdA: 0.35, f0: 0.4, pAc: 0, gasolineOnly: true, calmMax: 110 },
+  // calmMax: efficient cruising speed (km/h) of the calm driver behind the driving style (developer's choice, 2026-11-28)
+  city:  { label: 'City car', m: 1100, cdA: 0.60, f0: 0.6, pAc: 1000, calmMax: 90 },
+  sedan: { label: 'Sedan',    m: 1500, cdA: 0.65, f0: 0.8, pAc: 1500, calmMax: 90 },
+  suv:   { label: 'SUV',      m: 2000, cdA: 0.90, f0: 1.0, pAc: 2000, calmMax: 90 },
+  van:   { label: 'Van',      m: 2500, cdA: 1.10, f0: 1.2, pAc: 2000, calmMax: 90 },
+  scooter: { label: 'Scooter', m: 175, cdA: 0.40, f0: 0.25, pAc: 0, gasolineOnly: true, calmMax: 50 }, // meant for town and around it
+  moto:    { label: 'Motorcycle', m: 300, cdA: 0.35, f0: 0.4, pAc: 0, gasolineOnly: true, calmMax: 90 },
 };
 const FUELS = {
   gasoline: { label: 'Gasoline', k: 0.45 },
