@@ -40,6 +40,18 @@
         </select>
       </label>
 
+      <!-- named presets: type a name and Save, or pick one from the list to load it -->
+      <div class="field" id="preset-field">
+        <label for="preset-name"><span data-i18n="set.presetName">Vehicle name</span></label>
+        <div class="input-row preset-row">
+          <input id="preset-name" type="text" list="preset-list" autocomplete="off" maxlength="40" data-i18n-placeholder="set.presetHint">
+          <datalist id="preset-list"></datalist>
+          <button type="button" id="preset-save" class="ghost with-icon" data-i18n-title="set.presetSave"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg><span data-i18n="set.presetSave">Save</span></button>
+          <button type="button" id="preset-delete" class="ghost with-icon" data-i18n-title="set.presetDelete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M9 7V4h6v3"/></svg><span data-i18n="set.presetDelete">Delete</span></button>
+        </div>
+        <small class="msg" id="preset-msg" aria-live="polite"></small>
+      </div>
+
       <fieldset>
         <legend data-i18n="set.vehicleType">Vehicle type</legend>
         <div class="choices three vehicles">
@@ -104,12 +116,19 @@
         <small data-i18n="adv.g1Hint">G.1 is G without the driver. It is used first; G is the fallback.</small>
         <small class="err" data-for="g1"></small>
       </label>
-      <label class="field">
-        <span id="f-label">F.1: maximum laden mass (kg), optional</span>
-        <input name="maxLaden" type="text" inputmode="decimal" autocomplete="off">
-        <small id="f-hint">If there is no F.1, use F.2.</small>
+      <!-- maximum laden mass, and which certificate field it was copied from (F.1 or F.2) -->
+      <div class="field">
+        <label for="max-laden"><span data-i18n="adv.f">Maximum laden mass (kg), optional</span></label>
+        <div class="input-row">
+          <input id="max-laden" name="maxLaden" type="text" inputmode="decimal" autocomplete="off">
+          <div class="choices two f-kind" role="radiogroup" aria-label="Certificate field" data-i18n-aria="adv.fKind">
+            <label><input type="radio" name="fKind" value="f1"><span>F.1</span></label>
+            <label><input type="radio" name="fKind" value="f2"><span>F.2</span></label>
+          </div>
+        </div>
+        <small id="f-hint">If there is no F.1, copy F.2.</small>
         <small class="err" data-for="maxLaden"></small>
-      </label>
+      </div>
       <label class="field" data-cars>
         <span data-i18n="adv.p1">P.1: engine capacity (cm³)</span>
         <input name="displacement" type="text" inputmode="decimal" autocomplete="off">
@@ -130,9 +149,10 @@
       <fieldset data-cars>
         <legend data-i18n="adv.body">Body type</legend>
         <div class="choices three">
-          <label><input type="radio" name="body" value="hatchback"><span data-i18n="body.hatchback">Hatchback</span></label>
           <label><input type="radio" name="body" value="sedan"><span data-i18n="body.sedan">Sedan</span></label>
+          <label><input type="radio" name="body" value="hatchback"><span data-i18n="body.hatchback">Hatchback</span></label>
           <label><input type="radio" name="body" value="estate"><span data-i18n="body.estate">Estate</span></label>
+          <label><input type="radio" name="body" value="mpv"><span data-i18n="body.mpv">MPV</span></label>
           <label><input type="radio" name="body" value="suv"><span data-i18n="body.suv">SUV</span></label>
           <label><input type="radio" name="body" value="van"><span data-i18n="body.van">Van</span></label>
         </div>

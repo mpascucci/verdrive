@@ -11,6 +11,7 @@ import { binProfile, extremes } from './elevation.js';
 import { startUpdates, reloadIfUpdateWaiting } from './update.js';
 import { buildAdvanced, buildAdvancedMoto, simulatedWltp, checkAverage, kFromAverage, averageFromFuel } from './profile.js';
 import { normalizeStore, settingsFor, activeSettings, saveVehicle, setActive, recentVehicles } from './vehicles.js';
+import { normalizePresets, savePreset, deletePreset, getPreset, presetNames, cleanName } from './presets.js';
 import { startLog, stopLog, logAdd, logActive, hasSavedLogs, exportLatestLog, parseLog } from './triplog.js';
 import { t, nf, loadLang, saveLang, getLang, applyStatic, parseDecimal, numText } from './i18n.js';
 import { initFooter, renderFooter } from './footer.js';
@@ -142,6 +143,7 @@ function syncFuelChoices() {
   if (gasOnly) form.fuel.value = 'gasoline';
   // The first run asks for the three basic answers only; the optional average appears from the second visit.
   $('average-field').hidden = !settings;
+  $('preset-field').hidden = !settings;
 }
 // Choosing another vehicle shows what was saved for it. A vehicle never saved keeps the fuel and price on screen
 // (likely the same) and starts without an average, which belongs to one vehicle.
@@ -196,6 +198,7 @@ function averageText(l100) {
 
 function fillForm() {
   form.lang.value = getLang();
+  renderPresets();
   if (!settings) return;
   form.vehicle.value = settings.vehicle;
   form.fuel.value = settings.fuel;
@@ -234,12 +237,13 @@ function commitBasics() {
   syncFuelChoices();
 }
 
-form.addEventListener('submit', (e) => {
-  e.preventDefault();
+// Check the basic form and, when it is valid, make it the current settings (not yet saved). Returns false and
+// shows the errors otherwise. Used by Save and by Save preset.
+function applyForm() {
   const price = parseDecimal(form.price.value);
   $('price-err').textContent = priceOk(price) ? ''
     : t(Number.isNaN(price) ? 'err.numberRange' : 'err.range', { name: t('field.price'), min: numText(PRICE_MIN), max: PRICE_MAX, unit: '€/L' });
-  if ($('price-err').textContent) return;
+  if ($('price-err').textContent) return false;
   const average = averageFromField(form.average.value);
   const next = { vehicle: form.vehicle.value, fuel: form.fuel.value, price, advanced: settingsFor(store, form.vehicle.value)?.advanced };
   if (average.value !== null && !average.error) next.average = average.value;
@@ -249,9 +253,76 @@ form.addEventListener('submit', (e) => {
   // An average the vehicle cannot reach (below its idle fuel) is refused, so the user knows it was not applied.
   const unreachable = next.average !== undefined && (advanced ? advanced.kSource !== 'average' : quickK === null);
   $('average-err').textContent = average.error || (unreachable ? t('set.avgTooLow') : '');
-  if ($('average-err').textContent) { settings = previous; refreshAdvanced(); return; }
+  if ($('average-err').textContent) { settings = previous; refreshAdvanced(); return false; }
+  return true;
+}
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!applyForm()) return;
   saveSettings(settings);
   showSetup();
+});
+
+// ---------- named presets (Settings, above the vehicle type) ----------
+// Save stores the form, after the same checks as Save, under the typed name and makes it the current settings.
+// Picking a name from the list loads it: its vehicle type gets the preset's settings, and the form shows them.
+const PRESETS_KEY = 'fuelprice.presets';
+let presets = (() => {
+  try { return normalizePresets(JSON.parse(localStorage.getItem(PRESETS_KEY)), STORE_RULES); }
+  catch { return normalizePresets(null, STORE_RULES); }
+})();
+function persistPresets() {
+  try { localStorage.setItem(PRESETS_KEY, JSON.stringify(presets)); } catch { /* keep in memory only */ }
+}
+const presetInput = $('preset-name');
+function presetMsg(text, error = false) {
+  $('preset-msg').textContent = text;
+  $('preset-msg').classList.toggle('err', error);
+}
+function syncPresetButtons() {
+  $('preset-delete').disabled = !getPreset(presets, presetInput.value);
+}
+// The name of the last preset saved or loaded, while the active vehicle type is still its type; else ''.
+function activePresetName() {
+  const last = presets.last && getPreset(presets, presets.last);
+  return last && settings && last.vehicle === settings.vehicle ? presets.last : '';
+}
+function renderPresets() {
+  $('preset-list').replaceChildren(...presetNames(presets).map((n) => { const o = document.createElement('option'); o.value = n; return o; }));
+  presetInput.value = activePresetName();
+  presetMsg('');
+  syncPresetButtons();
+}
+presetInput.addEventListener('input', () => { presetMsg(''); syncPresetButtons(); });
+presetInput.addEventListener('change', () => {
+  const p = getPreset(presets, presetInput.value);
+  if (!p) return;
+  presetInput.value = cleanName(presetInput.value);
+  presets = { ...presets, last: presetInput.value };
+  persistPresets();
+  saveSettings(p); // the vehicle type takes the preset's settings, certificate fields included
+  settings = activeSettings(store);
+  refreshAdvanced();
+  fillForm();
+  syncPresetButtons();
+});
+$('preset-save').addEventListener('click', () => {
+  const name = cleanName(presetInput.value);
+  if (!name) { presetMsg(t('set.presetNoName'), true); presetInput.focus(); return; }
+  if (!form.vehicle.value) { form.querySelector('input[name="vehicle"]').reportValidity(); return; }
+  if (!applyForm()) return;
+  saveSettings(settings);
+  presets = savePreset(presets, name, settings);
+  persistPresets();
+  renderPresets();
+  presetMsg(t('set.presetSaved', { name }));
+});
+$('preset-delete').addEventListener('click', () => {
+  const name = cleanName(presetInput.value);
+  if (!getPreset(presets, name) || !confirm(t('set.presetConfirmDelete', { name }))) return;
+  presets = deletePreset(presets, name);
+  persistPresets();
+  renderPresets();
 });
 $('settings-cancel').addEventListener('click', showSetup);
 $('open-settings').addEventListener('click', () => {
@@ -327,12 +398,13 @@ function openAdvanced() {
   const moto = isMoto();
   document.querySelectorAll('#screen-advanced [data-cars]').forEach((el) => { el.hidden = moto; });
   document.querySelectorAll('#screen-advanced [data-moto]').forEach((el) => { el.hidden = !moto; });
-  $('f-label').textContent = t(moto ? 'adv.f2' : 'adv.f1');
   $('f-hint').textContent = t(moto ? 'adv.f2Hint' : 'adv.f1Hint');
   const raw = settings.advanced || {};
   for (const f of ADV_FIELDS) advForm.elements[f].value = raw[f] ?? '';
   advForm.elements.body.value = raw.body || '';
   advForm.elements.startStop.checked = Boolean(raw.startStop);
+  // F.1 or F.2: recorded with the value (the model reads both the same way); default F.1 for cars, F.2 for two-wheelers
+  advForm.elements.fKind.value = raw.fKind === 'f1' || raw.fKind === 'f2' ? raw.fKind : (moto ? 'f2' : 'f1');
   showAdvancedErrors({});
   $('advanced-remove').hidden = !settings.advanced;
   $('advanced-result').hidden = !advanced;
@@ -341,7 +413,7 @@ function openAdvanced() {
 }
 advForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  const raw = { body: advForm.elements.body.value, startStop: advForm.elements.startStop.checked };
+  const raw = { body: advForm.elements.body.value, startStop: advForm.elements.startStop.checked, fKind: advForm.elements.fKind.value };
   for (const f of ADV_FIELDS) raw[f] = advForm.elements[f].value;
   const r = buildProfile(raw, settings.average ?? null);
   if (r.errors) {
@@ -401,7 +473,7 @@ function showSetup() {
   const line = (text) => { const d = document.createElement('div'); d.textContent = text; return d; };
   $('recap').replaceChildren(
     badge,
-    line(vehicleLabel(settings.vehicle)),
+    line(activePresetName() || vehicleLabel(settings.vehicle)), // the vehicle's name if it has one, else its type
     ...(settings.average ? [line(t('recap.average', { v: averageText(settings.average) }))] : []),
   );
   renderVehicleSwitch();

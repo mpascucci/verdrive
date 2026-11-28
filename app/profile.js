@@ -48,7 +48,7 @@ const G_AGREE = (mass) => t('note.gAgree', { m: Math.round(mass) });
 const G1_NOTE = (mass) => t('note.g1', { m: Math.round(mass) });
 const G_MISSING = (mass) => t('note.gMissing', { m: Math.round(mass) });
 const CDA_NOTE = (cdA) => t('note.cda', { v: nf(cdA, 2) });
-export const BODY_LABELS = { hatchback: 'Hatchback', sedan: 'Sedan', estate: 'Estate', suv: 'SUV', van: 'Van' };
+export const BODY_LABELS = { hatchback: 'Hatchback', sedan: 'Sedan', estate: 'Estate', mpv: 'MPV', suv: 'SUV', van: 'Van' };
 
 /** Typed text or number to a number: "." or "," as decimal separator; blank gives null, junk gives NaN. */
 const num = parseDecimal;

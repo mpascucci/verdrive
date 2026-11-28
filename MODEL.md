@@ -150,6 +150,7 @@ $$
 | City car | 0.60 |
 | Hatchback / sedan | 0.65 |
 | Estate | 0.70 |
+| MPV (multi-purpose vehicle) | 0.97 |
 | SUV | 0.90 |
 | Van | 1.10 |
 | Scooter / motorcycle (with rider) | 0.40 / 0.35 |

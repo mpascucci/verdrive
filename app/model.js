@@ -224,7 +224,7 @@ export const IDLE_PER_LITRE = 0.5;
 export const WHEEL_POWER_SHARE = 0.9;
 
 /** Typical drag area CdA (m²) by body type. Rough values, in line with the Tier 1 presets (0.60–1.10). */
-export const CDA_BY_BODY = { hatchback: 0.65, sedan: 0.65, estate: 0.70, suv: 0.90, van: 1.10 };
+export const CDA_BY_BODY = { hatchback: 0.65, sedan: 0.65, estate: 0.70, mpv: 0.97, suv: 0.90, van: 1.10 };
 
 /**
  * Idle fuel rate f₀ from the engine capacity (certificate field P.1).

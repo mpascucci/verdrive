@@ -4,7 +4,8 @@
 // be a function of those values (plurals, long paragraphs). A key missing in Italian falls back to English,
 // and a key missing everywhere comes back as the key itself, so a gap shows on screen instead of breaking.
 // nf(x, decimals) formats a number for the current language (Italian: decimal comma).
-// applyStatic(root) fills the page: data-i18n (text), data-i18n-aria (aria-label), data-i18n-title (title).
+// applyStatic(root) fills the page: data-i18n (text), data-i18n-aria (aria-label), data-i18n-title (title),
+// data-i18n-placeholder (placeholder).
 // The language is stored on the phone; the first visit follows the browser (Italian if it is Italian).
 // Pure parts are tested in i18n.test.js.
 
@@ -16,6 +17,13 @@ const EN = {
   'set.title': 'Your vehicle',
   'set.language': 'Language',
   'set.vehicleType': 'Vehicle type',
+  'set.presetName': 'Vehicle name',
+  'set.presetHint': 'e.g. My car',
+  'set.presetSave': 'Save',
+  'set.presetDelete': 'Delete',
+  'set.presetNoName': 'Type a name first.',
+  'set.presetSaved': 'Saved as “{name}”.',
+  'set.presetConfirmDelete': 'Delete “{name}”?',
   'set.fuel': 'Fuel',
   'set.price': 'Price (€/L)',
   'set.average': 'Average consumption (L/100 km), optional',
@@ -50,7 +58,7 @@ const EN = {
 
   'veh.city': 'City car', 'veh.sedan': 'Sedan', 'veh.suv': 'SUV', 'veh.van': 'Van', 'veh.scooter': 'Scooter', 'veh.moto': 'Motorcycle',
   'fuel.gasoline': 'Gasoline', 'fuel.diesel': 'Diesel', 'fuel.lpg': 'LPG (GPL)', 'fuel.lpgShort': 'LPG',
-  'body.hatchback': 'Hatchback', 'body.sedan': 'Sedan', 'body.estate': 'Estate', 'body.suv': 'SUV', 'body.van': 'Van',
+  'body.hatchback': 'Hatchback', 'body.sedan': 'Sedan', 'body.estate': 'Estate', 'body.mpv': 'MPV', 'body.suv': 'SUV', 'body.van': 'Van',
 
   // advanced settings (Tier 2)
   'adv.title': 'Advanced settings',
@@ -60,9 +68,9 @@ const EN = {
   'adv.gHint': 'Used only if G.1 is blank. If both are blank, the typical mass of your vehicle type is used.',
   'adv.g1': 'G.1: empty mass (kg), optional',
   'adv.g1Hint': 'G.1 is G without the driver. It is used first; G is the fallback.',
-  'adv.f1': 'F.1: maximum laden mass (kg), optional',
-  'adv.f2': 'F.2: maximum laden mass (kg), optional',
-  'adv.f1Hint': 'If there is no F.1, use F.2.',
+  'adv.f': 'Maximum laden mass (kg), optional',
+  'adv.fKind': 'Certificate field',
+  'adv.f1Hint': 'If there is no F.1, copy F.2.',
   'adv.f2Hint': 'Used to estimate the mass of the bike if there is no G.',
   'adv.p1': 'P.1: engine capacity (cm³)',
   'adv.p2': 'P.2: maximum power (kW)',
@@ -224,6 +232,13 @@ const IT = {
   'set.title': 'Il tuo veicolo',
   'set.language': 'Lingua',
   'set.vehicleType': 'Tipo di veicolo',
+  'set.presetName': 'Nome del veicolo',
+  'set.presetHint': 'es. La mia auto',
+  'set.presetSave': 'Salva',
+  'set.presetDelete': 'Elimina',
+  'set.presetNoName': 'Scrivi prima un nome.',
+  'set.presetSaved': 'Salvato come «{name}».',
+  'set.presetConfirmDelete': 'Eliminare «{name}»?',
   'set.fuel': 'Carburante',
   'set.price': 'Prezzo (€/L)',
   'set.average': 'Consumo medio (km/L), facoltativo',
@@ -257,7 +272,7 @@ const IT = {
 
   'veh.city': 'Citycar', 'veh.sedan': 'Berlina', 'veh.suv': 'SUV', 'veh.van': 'Furgone', 'veh.scooter': 'Scooter', 'veh.moto': 'Moto',
   'fuel.gasoline': 'Benzina', 'fuel.diesel': 'Gasolio', 'fuel.lpg': 'GPL', 'fuel.lpgShort': 'GPL',
-  'body.hatchback': 'Due volumi', 'body.sedan': 'Berlina', 'body.estate': 'Station wagon', 'body.suv': 'SUV', 'body.van': 'Furgone',
+  'body.hatchback': 'Due volumi', 'body.sedan': 'Berlina', 'body.estate': 'Station wagon', 'body.mpv': 'Multispazio', 'body.suv': 'SUV', 'body.van': 'Furgone',
 
   'adv.title': 'Impostazioni avanzate',
   'adv.ledeCars': 'Copia questi campi dalla carta di circolazione (auto e furgoni a benzina, gasolio o GPL; non ibride né elettriche). Sostituiscono i valori indicativi e adattano il modello di consumo alla tua auto.',
@@ -266,9 +281,9 @@ const IT = {
   'adv.gHint': 'Usato solo se G.1 è vuoto. Se sono vuoti entrambi, si usa la massa tipica del tuo tipo di veicolo.',
   'adv.g1': 'G.1: massa a vuoto (kg), facoltativo',
   'adv.g1Hint': 'G.1 è G senza il conducente. Si usa per primo; G è la riserva.',
-  'adv.f1': 'F.1: massa massima a pieno carico (kg), facoltativo',
-  'adv.f2': 'F.2: massa massima a pieno carico (kg), facoltativo',
-  'adv.f1Hint': 'Se manca F.1, usa F.2.',
+  'adv.f': 'Massa massima a pieno carico (kg), facoltativo',
+  'adv.fKind': 'Campo della carta di circolazione',
+  'adv.f1Hint': 'Se manca F.1, copia F.2.',
   'adv.f2Hint': 'Serve a stimare la massa della moto se manca G.',
   'adv.p1': 'P.1: cilindrata (cm³)',
   'adv.p2': 'P.2: potenza massima (kW)',
@@ -495,4 +510,5 @@ export function applyStatic(root = document) {
   root.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t(el.dataset.i18n); });
   root.querySelectorAll('[data-i18n-aria]').forEach((el) => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
   root.querySelectorAll('[data-i18n-title]').forEach((el) => { el.setAttribute('title', t(el.dataset.i18nTitle)); });
+  root.querySelectorAll('[data-i18n-placeholder]').forEach((el) => { el.setAttribute('placeholder', t(el.dataset.i18nPlaceholder)); });
 }

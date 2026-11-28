@@ -22,6 +22,7 @@ const PRECACHE = [
   'update.js',
   'profile.js',
   'vehicles.js',
+  'presets.js',
   'wltc.js',
   'elevation.js',
   'i18n.js',
