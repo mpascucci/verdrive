@@ -143,7 +143,6 @@ function syncFuelChoices() {
   if (gasOnly) form.fuel.value = 'gasoline';
   // The first run asks for the three basic answers only; the optional average appears from the second visit.
   $('average-field').hidden = !settings;
-  $('preset-field').hidden = !settings;
 }
 // Choosing another vehicle shows what was saved for it. A vehicle never saved keeps the fuel and price on screen
 // (likely the same) and starts without an average, which belongs to one vehicle.
@@ -256,16 +255,10 @@ function applyForm() {
   if ($('average-err').textContent) { settings = previous; refreshAdvanced(); return false; }
   return true;
 }
-form.addEventListener('submit', (e) => {
-  e.preventDefault();
-  if (!applyForm()) return;
-  saveSettings(settings);
-  showSetup();
-});
-
 // ---------- named presets (Settings, above the vehicle type) ----------
-// Save stores the form, after the same checks as Save, under the typed name and makes it the current settings.
-// Picking a name from the list loads it: its vehicle type gets the preset's settings, and the form shows them.
+// The name is required: Save (the form's submit, next to the name) checks the form, makes it the current settings,
+// stores it under the name and closes Settings. Picking a name from the list loads it: its vehicle type gets the
+// preset's settings, and the form shows them.
 const PRESETS_KEY = 'fuelprice.presets';
 let presets = (() => {
   try { return normalizePresets(JSON.parse(localStorage.getItem(PRESETS_KEY)), STORE_RULES); }
@@ -304,16 +297,15 @@ presetInput.addEventListener('change', () => {
   fillForm();
   syncPresetButtons();
 });
-$('preset-save').addEventListener('click', () => {
-  const name = cleanName(presetInput.value);
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = cleanName(presetInput.value); // spaces only pass the browser's `required`
   if (!name) { presetMsg(t('set.presetNoName'), true); presetInput.focus(); return; }
-  if (!form.vehicle.value) { form.querySelector('input[name="vehicle"]').reportValidity(); return; }
   if (!applyForm()) return;
   saveSettings(settings);
   presets = savePreset(presets, name, settings);
   persistPresets();
-  renderPresets();
-  presetMsg(t('set.presetSaved', { name }));
+  showSetup();
 });
 $('preset-delete').addEventListener('click', () => {
   const name = cleanName(presetInput.value);

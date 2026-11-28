@@ -113,8 +113,6 @@ legend { padding: 0; margin-bottom: 0.5rem; color: var(--dim); }
   .settings-button { width: 48px; padding: 0; }
   .settings-button span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
-/* a label written on two lines (\n in the text) */
-.two-lines { white-space: pre-line; line-height: 1.25; padding-top: 0.4rem; padding-bottom: 0.4rem; }
 /* a translated word inside a choice or a line, not italic */
 .choices i, .avg-line i { font-style: normal; }
 /* dropdowns (language, fuel) look like the text fields */

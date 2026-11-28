@@ -40,13 +40,13 @@
         </select>
       </label>
 
-      <!-- named presets: type a name and Save, or pick one from the list to load it -->
+      <!-- vehicle name (required): Save stores the settings under it and closes; pick a saved name from the list to load it -->
       <div class="field" id="preset-field">
         <label for="preset-name"><span data-i18n="set.presetName">Vehicle name</span></label>
         <div class="input-row preset-row">
-          <input id="preset-name" type="text" list="preset-list" autocomplete="off" maxlength="40" data-i18n-placeholder="set.presetHint">
+          <input id="preset-name" type="text" list="preset-list" autocomplete="off" maxlength="40" required data-i18n-placeholder="set.presetHint">
           <datalist id="preset-list"></datalist>
-          <button type="button" id="preset-save" class="ghost with-icon" data-i18n-title="set.presetSave"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg><span data-i18n="set.presetSave">Save</span></button>
+          <button type="submit" id="preset-save" class="primary with-icon" data-i18n-title="set.presetSave"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg><span data-i18n="set.presetSave">Save</span></button>
           <button type="button" id="preset-delete" class="ghost with-icon" data-i18n-title="set.presetDelete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M9 7V4h6v3"/></svg><span data-i18n="set.presetDelete">Delete</span></button>
         </div>
         <small class="msg" id="preset-msg" aria-live="polite"></small>
@@ -90,9 +90,7 @@
         <small class="err" id="average-err"></small>
       </div>
 
-      <button type="submit" class="primary" data-i18n="set.save">Save</button>
-      <button type="button" id="open-advanced" class="ghost two-lines" data-i18n="set.openAdvanced">Advanced settings
-(registration certificate)</button>
+      <button type="button" id="open-advanced" class="ghost" data-i18n="set.openAdvanced">Advanced settings</button>
       <button type="button" id="settings-cancel" class="ghost" hidden data-i18n="common.cancel">Cancel</button>
     </form>
   </main>
