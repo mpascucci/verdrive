@@ -4,7 +4,7 @@
 import {
   tractivePower, fuelRate, smooth, toCost,
   slopeFromAltitude, smoothSlope, slopeLength, altitudeStep, co2FromFuel, treeDays, CO2_PER_LITRE, TREE_KG_PER_YEAR,
-  driveQuality, styleFactors, CALM_TAU,
+  styleLevel, styleFactors, styleMark, STYLE_MARK_MAX, CALM_TAU,
 } from './model.js';
 import { startGps, stopGps, signalBars } from './gps.js';
 import { binProfile, extremes } from './elevation.js';
@@ -582,7 +582,7 @@ function startTrip({ demo, replay = false }) {
     calmV: null, calmLitres: 0, calmDist: 0,
     ref: null,        // cost at steady cruise (€/h)
     recent: [{ s: 0, L: 0, d: 0 }], // running totals (seconds, litres, metres) for the last-5-minutes average
-    profile: [],      // { d, h, L, s } per sample, for the altitude profile on the summary
+    profile: [],      // { d, h, L, s, p } per sample, for the altitude profile on the summary (p: autoScalePos)
     demoTimer: null,
   };
   trip.ref = cruiseReference();
@@ -605,7 +605,11 @@ function startTrip({ demo, replay = false }) {
   $('trip-cost').textContent = '0.00';
   $('distance').textContent = '0.0';
   renderFuelAverage();
-  dialUnit = 'h'; // every trip starts in €/h
+  // every trip starts in €/h, as if standing still; render() moves it to €/100 km once above PER_KM_MIN_SPEED
+  clearTimeout(dialPeekTimer); // a tap from the last trip
+  fuelKml = null;
+  dialUnit = 'h';
+  trip.autoPerHour = true;
   renderCostUnit();
   $('avg-mark').toggleAttribute('hidden', true);
   setDialValue(fixedDigits(null));
@@ -755,7 +759,7 @@ function onSample({ v, accuracy, t, alt = null, altAcc = null }) {
   trip.recent.push({ s: trip.seconds, L: trip.litres, d: trip.distance });
   // keep one entry at or before the window start, so the window spans the full 5 minutes
   while (trip.recent.length > 1 && trip.recent[1].s <= trip.seconds - RECENT_WINDOW) trip.recent.shift();
-  if (trip.altS != null) trip.profile.push({ d: trip.distance, h: trip.altS, L: trip.litres, s: trip.seconds });
+  if (trip.altS != null) trip.profile.push({ d: trip.distance, h: trip.altS, L: trip.litres, s: trip.seconds, p: autoScalePos() });
   if (v < 0.5) trip.idleLitres += dL;
   if (trip.ac) {
     const withoutAc = fuelAtWithoutAc(v, trip.aS, theta);
@@ -794,6 +798,9 @@ function logMeta() {
     demo: trip.demo,
     vehicle: settings.vehicle,
     fuel: settings.fuel,
+    price_per_L: settings.price,
+    // the vehicle's settings as typed (fuel, price, average, certificate fields): a replay uses them (replaySettings)
+    settings_json: JSON.stringify(settings),
     passengers: trip.passengers,
     ac_at_start: trip.ac,
     mass_kg: e.m,
@@ -878,25 +885,59 @@ function renderGrade() {
 }
 
 // ----- display -----
-// The dial reads €/h, €/100 km, kg CO₂/h or km/h. A tap on the dial goes to the next of the first three; the four
-// lights in its top corners pick any unit, km/h included. Every trip starts in €/h. Each scale runs 0 to 2× the value at steady
-// cruise (CRUISE_SPEED) in its own unit, so cruise sits at the same place on the dial.
+// The dial reads €/h, €/100 km, fuel consumption or kg CO₂/h, picked by the four lights in its top corners, or km/h
+// for a moment after a tap on the speed figure (a tap on the dial itself does nothing). Every trip starts in €/h, standing still; below 5 km/h €/100 km gives way to €/h
+// and comes back above it. Each scale runs 0 to 2× the value at steady cruise (CRUISE_SPEED) in its own unit, so
+// cruise sits at the same place on the dial; except km/L (fuel consumption in Italian), on a log scale (kmlPos).
 const PER_KM_MIN_SPEED = 5 / 3.6;  // m/s: slower than this, a per-km figure has no meaning
 const PER_KM_MIN_DIST = 300;       // m: distance the averages need per km (as the fuel average)
 const PER_H_MIN_TIME = 30;         // s: time the averages need per hour
-// for each unit: its label, and how much one litre of fuel is worth in it (€ or kg CO₂)
+// for each unit: its label, and how much one litre of fuel is worth in it (€, litres or kg CO₂)
 const DIAL_UNITS = {
   h: { label: '€/h', perKm: false, perLitre: () => settings.price },
   km: { label: '€/100 km', perKm: true, perLitre: () => settings.price },
+  // consumption: L/100 km in English, km/L (its inverse, kml) in Italian; a tap on its lit light swaps them
+  fuel: { label: 'L/100 km', perKm: true, perLitre: () => 1, kml: () => fuelKml ?? getLang() === 'it' },
   co2: { label: 'kg CO₂/h', perKm: false, perLitre: () => CO2_PER_LITRE[settings.fuel] },
-  speed: { label: 'km/h', speed: true }, // a speedometer: picked with its light only, not in the tap cycle
+  speed: { label: 'km/h', speed: true }, // a speedometer, shown by a tap on the speed figure (no light)
 };
-const DIAL_CYCLE = ['h', 'km', 'co2'];
+const isKml = (u) => !!u.kml?.();
+const unitLabel = (u) => (isKml(u) ? 'km/L' : u.label);
 const SPEED_MAX = 140; // km/h at the end of the speedometer's scale (the band above it goes on to 210)
-let dialUnit = 'h';
+let dialUnit = 'km';
+let fuelKml = null; // the consumption light's unit picked by a tap (true: km/L); null: the language's
+
+// km/L scale: ∞ (no fuel) at the start; KML_TICK at 10° from it; then a log scale down to KML_END at the end
+// (two decades over the rest of the arc), going on into the band above the maximum. Above KML_TICK the position
+// follows L/km linearly, so it reaches the start at ∞.
+const KML_TICK = 50, KML_END = 0.5;            // km/L
+const KML_TICK_POS = 10 / 200;                 // 10° of the 200° scale (DIAL_SWEEP)
+const KML_TICKS = [Infinity, 50, 20, 10, 5, 2, 1, 0.5];
+function kmlPos(kml) {
+  if (kml == null) return Infinity;            // (almost) stopped: the end of the band, as the per-km units
+  if (kml >= KML_TICK) return KML_TICK_POS * (KML_TICK / kml); // 0 at ∞
+  return KML_TICK_POS + (1 - KML_TICK_POS) * Math.log(KML_TICK / kml) / Math.log(KML_TICK / KML_END);
+}
+
+/** Scale position (0–1 on the arc, above 1 in the band) of a value of the dial's unit; `ref` is its cruise value. */
+function scalePos(value, ref) {
+  if (isKml(DIAL_UNITS[dialUnit])) return kmlPos(value);
+  return value == null ? Infinity : value / ref / 2;
+}
+
+/** Scale position the needle would have in the dial's automatic mode: €/h below PER_KM_MIN_SPEED, else €/100 km.
+ *  For the altitude profile's colours; the same smoothed speed and fuel rate as the dial. */
+function autoScalePos() {
+  const perHour = trip.fS / trip.ref * settings.price; // €/h over €/h at cruise
+  return trip.vS < PER_KM_MIN_SPEED ? perHour / 2 : (perHour * CRUISE_SPEED / trip.vS) / 2; // per 100 km: × cruise / v
+}
+
+/** A dial value as text, for the averages below the dial. */
+const valueText = (x) => (x == null ? '–' : x === Infinity ? '∞' : nf(x, 1));
 
 function renderCostUnit() {
-  $('dial-unit').textContent = DIAL_UNITS[dialUnit].label; // the averages below the dial are in the same unit
+  $('dial-unit').textContent = unitLabel(DIAL_UNITS[dialUnit]); // the averages below the dial are in the same unit
+  $('light-fuel').textContent = unitLabel(DIAL_UNITS.fuel);
   // the light of the unit on show is lit
   document.querySelectorAll('.light').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.unit === dialUnit)));
 }
@@ -905,6 +946,7 @@ function renderCostUnit() {
 function dialValueOf({ litres, seconds, metres, minSeconds = PER_H_MIN_TIME }) {
   const u = DIAL_UNITS[dialUnit];
   if (u.speed) return seconds > minSeconds ? (metres / seconds) * 3.6 : null; // average speed
+  if (isKml(u)) return metres > PER_KM_MIN_DIST ? (litres > 0 ? metres / 1000 / litres : Infinity) : null;
   const amount = litres * u.perLitre();
   if (u.perKm) return metres > PER_KM_MIN_DIST ? (amount / metres) * 100000 : null;
   return seconds > minSeconds ? amount / (seconds / 3600) : null;
@@ -912,21 +954,34 @@ function dialValueOf({ litres, seconds, metres, minSeconds = PER_H_MIN_TIME }) {
 
 function render() {
   const price = settings.price;
+  // slowing down below PER_KM_MIN_SPEED in €/100 km: the figure would go blank, so the dial switches to €/h,
+  // and back to €/100 km when the speed rises above it again (unless a light was tapped in between)
+  if (dialUnit === 'km' && trip.vS < PER_KM_MIN_SPEED && trip.prevV >= PER_KM_MIN_SPEED) {
+    dialUnit = 'h';
+    trip.autoPerHour = true;
+    renderCostUnit();
+  } else if (trip.autoPerHour && dialUnit === 'h' && trip.vS >= PER_KM_MIN_SPEED) {
+    dialUnit = 'km';
+    trip.autoPerHour = false;
+    renderCostUnit();
+  }
+  trip.prevV = trip.vS;
   const u = DIAL_UNITS[dialUnit];
   let cost, ref;
   if (u.speed) {
     cost = trip.vS * 3.6;
     ref = SPEED_MAX / 2; // the scale ends at SPEED_MAX (2 × ref), like the others
   } else {
-    const perHour = trip.fS * u.perLitre(); // € or kg CO₂ per hour (fS is L/h)
+    const perHour = trip.fS * u.perLitre(); // €, litres or kg CO₂ per hour (fS is L/h)
     // cruise value in the dial's unit; trip.ref is €/h at cruise (recomputed when A/C changes)
     const refPerHour = (trip.ref / price) * u.perLitre();
     ref = u.perKm ? (refPerHour / (CRUISE_SPEED * 3.6)) * 100 : refPerHour;
     // now: per 100 km = (per h) / (km/h) × 100; when (almost) stopped, no figure and the pointer at the end of the band
     const slow = u.perKm && trip.vS < PER_KM_MIN_SPEED;
     cost = !u.perKm ? perHour : slow ? null : (perHour / (trip.vS * 3.6)) * 100;
+    if (isKml(u) && cost != null) cost = cost > 0 ? 100 / cost : Infinity; // L/100 km → km/L
   }
-  const ratio = cost == null ? Infinity : cost / ref;
+  const pos = scalePos(cost, ref);
 
   $('speed').textContent = Math.round(trip.vS * 3.6);
   $('trip-cost').textContent = nf(toCost({ litres: trip.litres, price }), 2);
@@ -935,15 +990,17 @@ function render() {
   renderGrade();
   $('altitude').textContent = trip.altS == null ? '–' : Math.round(trip.altS);
 
-  // scale runs 0 to 2x the cruising cost, so cruise sits at 50%, near the top
-  $('now-mark').style.transform = dialRotation(ratio / 2);
-  setDialValue(fixedDigits(cost)); // 88.8 layout, a fourth digit above 99.9; the point is the same in both languages
-  $('dial-value').style.setProperty('--cost-color', costColor(Math.min(1, ratio / 2)));
+  // scale runs 0 to 2x the cruising cost, so cruise sits at 50%, near the top (km/L: see kmlPos)
+  $('now-mark').style.transform = dialRotation(pos);
+  // above the first km/L tick the figure means little (coasting): no figure, the needle still shows it
+  const shown = isKml(u) && cost > KML_TICK ? null : cost;
+  setDialValue(fixedDigits(shown)); // 88.8 layout, a fourth digit above 99.9; the point is the same in both languages
+  $('dial-value').style.setProperty('--cost-color', costColor(Math.min(1, pos)));
   setDialScale(ref);
 
   // trip average (pauses excluded): above the bar and as a marker (needs 30 s, or 300 m per km)
   const avg = dialValueOf({ litres: trip.litres, seconds: trip.seconds, metres: trip.distance });
-  $('avg-value').textContent = avg == null ? '–' : nf(avg, 1);
+  $('avg-value').textContent = valueText(avg);
   placeMark('avg-mark', avg, ref);
 
   // last 5 minutes of trip time (pauses excluded); until then the same as the trip average
@@ -951,24 +1008,37 @@ function render() {
   const recent = trip.seconds > 30
     ? dialValueOf({ litres: trip.litres - base.L, seconds: trip.seconds - base.s, metres: trip.distance - base.d, minSeconds: 0 })
     : null;
-  $('recent-value').textContent = recent == null ? '–' : nf(recent, 1);
+  $('recent-value').textContent = valueText(recent);
   placeMark('recent-mark', recent, ref);
 }
 
-function setDialUnit(unit) {
-  dialUnit = unit;
+// A tap on a light, or on the speed figure (km/h), shows that unit for DIAL_PEEK_MS only, then the dial goes back to its automatic mode:
+// €/100 km, or €/h below PER_KM_MIN_SPEED. A tap on €/100 km goes back to the automatic mode at once. A tap on the lit
+// consumption light swaps L/100 km and km/L, until the timeout puts back the language's unit.
+const DIAL_PEEK_MS = 10000;
+let dialPeekTimer = null;
+function autoDialUnit() {
+  clearTimeout(dialPeekTimer);
+  dialPeekTimer = null;
+  fuelKml = null; // the consumption light back to the language's unit
+  const slow = !trip || trip.vS < PER_KM_MIN_SPEED;
+  dialUnit = slow ? 'h' : 'km';
+  if (trip) { trip.autoPerHour = slow; trip.prevV = trip.vS; }
   renderCostUnit();
   if (trip?.hasData) render();
 }
-// €/h → €/100 km → kg CO₂/h → €/h; from km/h, back to €/h
-function toggleCostUnit() {
-  setDialUnit(DIAL_CYCLE[(DIAL_CYCLE.indexOf(dialUnit) + 1) % DIAL_CYCLE.length]);
+function setDialUnit(unit) {
+  if (unit === 'km') { autoDialUnit(); return; }
+  if (unit === 'fuel' && dialUnit === 'fuel') fuelKml = !isKml(DIAL_UNITS.fuel); // lit: L/100 km ↔ km/L
+  clearTimeout(dialPeekTimer);
+  dialUnit = unit;
+  if (trip) trip.autoPerHour = false; // no automatic switch while the driver's pick is on show
+  dialPeekTimer = setTimeout(autoDialUnit, DIAL_PEEK_MS);
+  renderCostUnit();
+  if (trip?.hasData) render();
 }
-$('gauge').addEventListener('click', toggleCostUnit);
 document.querySelectorAll('.light').forEach((b) => b.addEventListener('click', () => setDialUnit(b.dataset.unit)));
-$('gauge').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCostUnit(); }
-});
+$('speed-toggle').addEventListener('click', () => setDialUnit('speed')); // the speedometer, for DIAL_PEEK_MS
 
 // Fuel average over the trip, in L/100 km or km/L (tap to switch; needs 300 m to mean anything)
 const FUEL_UNIT_KEY = 'fuelprice.fuelUnit';
@@ -1006,14 +1076,25 @@ function costColor(pos) {
   return 'var(--scale-100)';
 }
 
+// Colour of a style mark (0–5): red up to 1.5, yellow at 3, green at 4, blue (the dial's cyan) at 5, shading in
+// between (so 2/5 is orange).
+const MARK_COLORS = [[1.5, '--scale-100'], [3, '--scale-75'], [4, '--scale-25'], [5, '--scale-0']];
+function markColor(mark) {
+  if (mark <= MARK_COLORS[0][0]) return `var(${MARK_COLORS[0][1]})`;
+  for (let i = 1; i < MARK_COLORS.length; i++) {
+    const [m1, to] = MARK_COLORS[i], [m0, from] = MARK_COLORS[i - 1];
+    if (mark <= m1) return `color-mix(in oklab, var(${to}) ${(((mark - m0) / (m1 - m0)) * 100).toFixed(0)}%, var(${from}))`;
+  }
+  return `var(${MARK_COLORS[MARK_COLORS.length - 1][1]})`;
+}
+
 function placeMark(id, cost, ref) {
   $(id).toggleAttribute('hidden', cost == null); // SVG elements have no .hidden property
-  if (cost != null) $(id).style.transform = dialRotation(cost / ref / 2);
+  if (cost != null) $(id).style.transform = dialRotation(scalePos(cost, ref));
 }
 
 // ----- dial -----
-// The number stays centred under the pivot; the unit follows its right edge.
-// The figure is drawn as seven-segment digits, centred under the pivot; the unit follows its right edge.
+// The figure is drawn as seven-segment digits, centred under the pivot; the unit sits above the pivot (index.html).
 const DIGIT = { w: 20, h: 36, t: 4.4, gap: 4.5, slant: 0.12 };
 let dialText = null;
 function setDialValue(text) {
@@ -1029,7 +1110,6 @@ function setDialValue(text) {
     if (!s.on) p.setAttribute('class', 'off');
     return p;
   }));
-  $('dial-unit').setAttribute('x', (width / 2 - lean + 5).toFixed(1));
 }
 
 // The scale runs 0 to 2× the cruising cost over 200°, from −110°; cruise sits 10° left of straight up, so that the
@@ -1082,17 +1162,19 @@ function drawDialOver() {
 drawDialOver();
 
 // Ticks and figures: for the cost and CO₂ units at every quarter of the scale (0, ½, 1 = cruise at the top,
-// 1½ and 2× the cruising value); for km/h at the speeds people drive at (SPEED_TICKS).
+// 1½ and 2× the cruising value); for km/L at KML_TICKS; for km/h at the speeds people drive at (SPEED_TICKS).
 const DIAL_STEPS = [0, 0.25, 0.5, 0.75, 1];
 const SPEED_TICKS = [0, 30, 50, 90, 110, 130]; // km/h
 let dialScaleKey = null;
 function setDialScale(ref) {
-  const speed = DIAL_UNITS[dialUnit].speed;
-  const key = speed ? 'speed' : ref;
+  const speed = DIAL_UNITS[dialUnit].speed, kml = isKml(DIAL_UNITS[dialUnit]);
+  const key = speed ? 'speed' : kml ? 'kml' : `${dialUnit} ${ref}`;
   if (key === dialScaleKey) return;
   dialScaleKey = key;
   const steps = speed
     ? SPEED_TICKS.map((v) => ({ pos: v / SPEED_MAX, text: String(v), cruise: false }))
+    : kml
+    ? KML_TICKS.map((v) => ({ pos: kmlPos(v), text: v === Infinity ? '∞' : nf(v, v < 1 ? 1 : 0), cruise: false }))
     : DIAL_STEPS.map((pos) => ({ pos, text: String(Math.round(pos * 2 * ref)), cruise: pos === 0.5 })); // whole units
   const svg = 'http://www.w3.org/2000/svg';
   $('gauge-scale').replaceChildren(...steps.flatMap(({ pos, text, cruise }) => {
@@ -1163,9 +1245,47 @@ function treeTime(days) {
 // The log's GPS rows go through the same pipeline as a live drive (onSample), all at once, with the active
 // vehicle's settings and price; the people and the A/C at the start come from the log. Pauses are kept.
 // Nothing is logged and the GPS is off meanwhile. Ends on the summary, with a note naming the file.
+// The settings a log is replayed with. Logs since 2026-11-28 carry the vehicle's settings (settings_json): those,
+// so a replay runs as the trip did. Older logs: the settings saved for the log's vehicle (Tier 2 included) when it
+// is not the active one; a vehicle never saved gets its preset with the log's fuel, priced as the active vehicle
+// when the fuel is the same, else at the last price paid for that fuel, else DEFAULT_PRICE.
+// Logs without a known vehicle are replayed with the active vehicle.
+function replaySettings(meta) {
+  const logged = loggedSettings(meta);
+  if (logged) return logged;
+  const v = meta.vehicle;
+  if (!(v in PRESETS) || v === settings.vehicle) return settings;
+  const saved = settingsFor(store, v);
+  if (saved) return saved;
+  const fuel = PRESETS[v].gasolineOnly || !(meta.fuel in FUELS) ? 'gasoline' : meta.fuel;
+  const price = fuel === settings.fuel ? settings.price : lastPrice(fuel) ?? DEFAULT_PRICE;
+  return { vehicle: v, fuel, price };
+}
+
+/** The settings recorded in a log (settings_json), checked; null when missing or unusable. */
+function loggedSettings(meta) {
+  let s;
+  try { s = JSON.parse(meta.settings_json ?? 'null'); } catch { return null; }
+  if (!s || typeof s !== 'object' || !(s.vehicle in PRESETS) || !(s.fuel in FUELS)) return null;
+  if (PRESETS[s.vehicle].gasolineOnly && s.fuel !== 'gasoline') return null;
+  const price = Number(s.price);
+  if (!(price >= 0.1 && price <= 10)) return null;
+  const out = { vehicle: s.vehicle, fuel: s.fuel, price };
+  if (s.average != null) out.average = s.average;
+  if (s.advanced && typeof s.advanced === 'object') out.advanced = s.advanced;
+  return out;
+}
+
 function replayTrip(log, fileName) {
   const gpsRows = log.rows.filter((r) => r.v != null && r.t >= 0);
   if (gpsRows.length < 2) throw new Error(t('replay.noGps'));
+  const active = settings;
+  settings = replaySettings(log.meta); // for this replay only: put back below
+  refreshAdvanced();
+  try { replayRows(log, fileName); } finally { settings = active; refreshAdvanced(); }
+}
+
+function replayRows(log, fileName) {
   endGps();
   startTrip({ demo: false, replay: true });
   trip.passengers = Math.min(9, Math.max(1, Math.round(Number(log.meta.passengers)) || setup.passengers));
@@ -1222,6 +1342,14 @@ function endTrip({ replayOf = null } = {}) {
 // The summary of the last trip.
 let summaryData = null;
 const STYLE_MIN_DIST = 1000; // m: shorter trips get no driving style
+// Average consumption of a finished trip in the language's unit (km/L in Italian, L/100 km in English); from 300 m on.
+function consumptionText({ litres, distance }) {
+  if (distance <= 300) return '—';
+  const km = distance / 1000;
+  if (defaultFuelUnit() !== 'kml') return `${nf(litres / km * 100, 1)} L/100 km`;
+  return litres > 0.01 ? `${nf(km / litres, 1)} km/L` : '—';
+}
+
 function renderSummary() {
   const { trip, replayOf, hadLog } = summaryData; // the finished trip (the global one is already null)
   const price = settings.price;
@@ -1232,9 +1360,9 @@ function renderSummary() {
     [t('sum.distance'), `${nf(km, 1)} km`],
     [t('sum.time'), `${mins} min`],
     [t('sum.fuel'), `${nf(trip.litres, 2)} L`],
-    [t('sum.total'), `€${nf(total, 2)}`],
+    [t('sum.consumption'), consumptionText(trip)],
     [t('sum.average'), trip.seconds > 30 ? `€${nf(total / (trip.seconds / 3600), 1)}/h` : '—'],
-    [t('sum.idling'), `€${nf(toCost({ litres: trip.idleLitres, price }), 2)}`],
+    [t('sum.total'), `€${nf(total, 2)}`, 'total'],
   ];
   const co2 = co2FromFuel({ litres: trip.litres, fuel: settings.fuel });
   rows.push([t('sum.co2'), `${nf(co2, 1)} kg`]);
@@ -1247,15 +1375,10 @@ function renderSummary() {
     smooth: { litres: trip.smoothLitres, dist: trip.smoothDist },
     calm: { litres: trip.calmLitres, dist: trip.calmDist },
   }) : null;
-  const level = factors && driveQuality(factors.total);
-  if (level) {
-    // what to change: the extra fuel from accelerations and from speed, each shown when it is at least 1%
-    const pct = (x) => Math.round((x - 1) * 100);
-    const parts = [];
-    if (pct(factors.accel) > 0) parts.push(t('style.accel', { p: pct(factors.accel) }));
-    if (pct(factors.speed) > 0) parts.push(t('style.speed', { p: pct(factors.speed) }));
-    rows.unshift([t('sum.style'), t(`style.${level}`), 'style', { level, note: parts.length ? parts.join(', ') : t('style.same') }]);
-  }
+  // accelerations and speed, each always shown as a mark out of 5 (5 = calm, 0 = +50% fuel); the badge from their sum
+  const marks = factors && [['style.accel', factors.accel], ['style.speed', factors.speed]].map(([key, f]) => ({ label: t(key), mark: styleMark(f) }));
+  const level = marks && marks.every((m) => m.mark != null) ? styleLevel(marks[0].mark + marks[1].mark) : null;
+  if (level) rows.unshift([t('sum.style'), t(`style.${level}`), 'style', { level, marks }]);
   const detail = $('tree-detail');
   detail.hidden = true;
   detail.textContent = t('tree.detail', {
@@ -1267,10 +1390,19 @@ function renderSummary() {
     const dt = document.createElement('dt'); dt.textContent = k;
     const dd = document.createElement('dd'); dd.textContent = v;
     d.append(dt, dd);
+    if (kind === 'total') d.className = 'total';
     if (kind === 'style') {
       d.className = 'style';
       d.dataset.level = extra.level;
-      const note = document.createElement('small'); note.textContent = extra.note;
+      // "accelerations 2/5 · speed 5/5", each mark in its colour (markColor)
+      const note = document.createElement('small');
+      extra.marks.forEach(({ label, mark }, i) => {
+        const b = document.createElement('b');
+        b.className = 'mark';
+        b.textContent = `${mark}/${STYLE_MARK_MAX}`;
+        b.style.color = markColor(mark);
+        note.append(`${i ? ' · ' : ''}${label} `, b);
+      });
       dd.append(note);
     }
     if (kind === 'tree') {
@@ -1287,7 +1419,7 @@ function renderSummary() {
     }
     return d;
   }));
-  drawProfile(trip.profile, trip.ref, price);
+  drawProfile(trip.profile);
   $('export-log').hidden = !hadLog;
   const note = $('summary-note');
   note.hidden = !replayOf;
@@ -1295,50 +1427,84 @@ function renderSummary() {
 }
 
 // ---------- altitude profile (summary) ----------
-// Altitude along the road, each stretch coloured by its cost per hour on the dial's scale.
-// Not shown for trips under 300 m or without altitude.
-function drawProfile(points, ref, price) {
+// Altitude along the road over a grey area, the line of each stretch coloured as the dial in its automatic mode
+// (€/100 km, or €/h below 5 km/h): the mean of the needle's positions in the stretch (no legend).
+// A tap on the figure switches to the speed (the same colours, its min and max on the left axis); a second tap
+// goes back to the altitude. Not shown for trips under 300 m or without altitude.
+function drawProfile(points) {
   const fig = $('profile');
   const svg = $('profile-svg');
   svg.replaceChildren();
+  setProfileSpeed(false); // each summary opens on the altitude
   const bins = binProfile(points);
   const total = points.length ? points[points.length - 1].d - points[0].d : 0;
   fig.hidden = bins.length < 2 || total < 300;
   if (fig.hidden) return;
 
   const { min, max } = extremes(bins);
-  // plot box inside the 320 × 132 viewBox; altitude labels on the left, distance below
+  // plot box inside the 320 × 132 viewBox; altitude (or speed) labels on the left, distance below
   const X0 = 44, X1 = 314, Y0 = 8, Y1 = 110;
   const span = Math.max(20, max.h - min.h); // a flat trip stays flat instead of magnifying noise
   const mid = (max.h + min.h) / 2;
   const x = (d) => X0 + (d / bins[bins.length - 1].d) * (X1 - X0);
   const y = (h) => Y1 - ((h - (mid - span / 2)) / span) * (Y1 - Y0);
   const ns = 'http://www.w3.org/2000/svg';
-  const el = (tag, attrs, text) => {
+  const el = (parent, tag, attrs, text) => {
     const e = document.createElementNS(ns, tag);
     for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
     if (text != null) e.textContent = text;
-    svg.append(e);
+    parent.append(e);
     return e;
   };
+  // layers, bottom to top: guides, altitude plot (area, coloured line) or speed line, labels
+  const altGuides = el(svg, 'g', { class: 'alt-axis' });
+  const speedGuides = el(svg, 'g', { class: 'speed-layer' });
   const pts = bins.map((b) => [x(b.d).toFixed(1), y(b.h).toFixed(1)]);
-  el('polygon', { class: 'area', points: `${pts[0][0]},${Y1} ${pts.map((p) => p.join(',')).join(' ')} ${pts[pts.length - 1][0]},${Y1}` });
+  const colors = bins.map((bin) => (bin.p == null ? 'var(--dim)' : costColor(bin.p)));
+  const altPlot = el(svg, 'g', { class: 'alt-axis' }); // the altitude plot: area and coloured line
+  el(altPlot, 'polygon', { class: 'area', points: `${pts[0][0]},${Y1} ${pts.map((p) => p.join(',')).join(' ')} ${pts[pts.length - 1][0]},${Y1}` });
   for (let i = 1; i < bins.length; i++) {
-    const rate = bins[i].rate;
-    const color = rate == null ? 'var(--dim)' : costColor((toCost({ litres: rate, price }) / ref) / 2);
-    el('line', { class: 'seg', x1: pts[i - 1][0], y1: pts[i - 1][1], x2: pts[i][0], y2: pts[i][1], style: `stroke:${color}` });
+    el(altPlot, 'line', { class: 'seg', x1: pts[i - 1][0], y1: pts[i - 1][1], x2: pts[i][0], y2: pts[i][1], style: `stroke:${colors[i]}` });
   }
-  // max and min as labels on the vertical axis, each with a thin dashed line across the plot
-  for (const b of [max, min]) {
-    const py = y(b.h).toFixed(1);
-    el('line', { class: 'guide', x1: X0, y1: py, x2: X1, y2: py });
-    el('text', { class: 'ext', x: X0 - 5, y: py, 'text-anchor': 'end', 'dominant-baseline': 'central' }, `${Math.round(b.h)} m`);
+  const speedLine = el(svg, 'g', { class: 'speed-layer' });
+  const altLabels = el(svg, 'g', { class: 'alt-axis' });
+  const speedLabels = el(svg, 'g', { class: 'speed-layer' });
+  // max and min on the left axis, each with a thin dashed line across the plot
+  const axis = (guides, labels, py, text, cls) => {
+    el(guides, 'line', { class: 'guide', x1: X0, y1: py, x2: X1, y2: py });
+    el(labels, 'text', { class: cls, x: X0 - 5, y: py, 'text-anchor': 'end', 'dominant-baseline': 'central' }, text);
+  };
+  for (const b of [max, min]) axis(altGuides, altLabels, y(b.h).toFixed(1), `${Math.round(b.h)} m`, 'ext');
+  // speed: the average of each stretch, on its own scale (min to max of the stretches)
+  const speeds = bins.filter((b) => b.v != null);
+  fig.classList.toggle('no-speed', speeds.length < 2);
+  if (speeds.length > 1) {
+    const vMin = Math.min(...speeds.map((b) => b.v)), vMax = Math.max(...speeds.map((b) => b.v));
+    const vSpan = Math.max(10 / 3.6, vMax - vMin); // at least 10 km/h, so a steady drive stays flat
+    const vy = (v) => Y1 - ((v - vMin) / vSpan) * (Y1 - Y0);
+    // each stretch in the same colour as on the altitude plot
+    for (let i = 1; i < bins.length; i++) {
+      const [a, b] = [bins[i - 1], bins[i]];
+      if (a.v == null || b.v == null) continue;
+      el(speedLine, 'line', { class: 'seg thin', x1: x(a.d).toFixed(1), y1: vy(a.v).toFixed(1), x2: x(b.d).toFixed(1), y2: vy(b.v).toFixed(1), style: `stroke:${colors[i]}` });
+    }
+    for (const v of [vMax, vMin]) axis(speedGuides, speedLabels, vy(v).toFixed(1), `${Math.round(v * 3.6)} km/h`, 'ext speed-ext');
   }
-  svg.prepend(...svg.querySelectorAll('.guide')); // under the curve
-  el('text', { class: 'axis', x: X0, y: 128, 'text-anchor': 'start' }, '0 km');
-  el('text', { class: 'axis', x: X1, y: 128, 'text-anchor': 'end' }, `${nf(total / 1000, 1)} km`);
+  el(svg, 'text', { class: 'axis', x: X0, y: 128, 'text-anchor': 'start' }, '0 km');
+  el(svg, 'text', { class: 'axis', x: X1, y: 128, 'text-anchor': 'end' }, `${nf(total / 1000, 1)} km`);
   svg.setAttribute('aria-label', t('sum.profileAria', { min: Math.round(min.h), max: Math.round(max.h), km: nf(total / 1000, 1) }));
 }
+
+function setProfileSpeed(on) {
+  $('profile').classList.toggle('show-speed', on);
+  $('profile-caption').textContent = t(on ? 'sum.speedProfile' : 'sum.profile');
+  $('profile').setAttribute('aria-pressed', String(on));
+}
+function toggleProfileSpeed() {
+  if (!$('profile').classList.contains('no-speed')) setProfileSpeed(!$('profile').classList.contains('show-speed'));
+}
+$('profile').addEventListener('click', toggleProfileSpeed);
+$('profile').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleProfileSpeed(); } });
 
 // ---------- screen wake lock ----------
 let wakeLock = null;

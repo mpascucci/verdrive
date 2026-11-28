@@ -10,6 +10,7 @@
 const CACHE = 'fuelprice-v1'; // only change this to drop every old cached file (e.g. after renaming files)
 const NETWORK_TIMEOUT = 4000; // ms; a weak signal in the car should not freeze the app
 
+// A new app file goes here and in WATCHED (update.js): files.test.js fails until it does.
 const PRECACHE = [
   './',
   'index.html',

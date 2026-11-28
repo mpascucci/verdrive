@@ -37,6 +37,26 @@ test('binProfile: a stop inside a stretch lowers its rate (time passes, little f
   assert.ok(slowest < 2, String(slowest));
 });
 
+test('binProfile: the colour of each stretch is the mean of its needle positions', () => {
+  const pts = climb.map((q, i) => ({ ...q, p: i < 51 ? 0.4 : 0.8 }));
+  const bins = binProfile(pts, 10);
+  assert.ok(Math.abs(bins[0].p - 0.4) < 1e-9 && Math.abs(bins[9].p - 0.8) < 1e-9, `${bins[0].p} ${bins[9].p}`);
+});
+
+test('binProfile: points without a needle position give no colour', () => {
+  for (const b of binProfile(climb, 10)) assert.equal(b.p, null);
+});
+
+test('binProfile: the speed of each stretch is road over time; a stop lowers it', () => {
+  for (const b of binProfile(climb, 10)) assert.ok(Math.abs(b.v - 10) < 1e-9, String(b.v));
+  const pts = climb.slice(0, 51);
+  const stop = pts[50];
+  for (let k = 1; k <= 60; k++) pts.push({ d: stop.d, h: stop.h, L: stop.L, s: stop.s + k });
+  const resume = pts[pts.length - 1];
+  for (let i = 51; i <= 100; i++) pts.push({ d: i * 10, h: 100 + i, L: 0, s: resume.s + (i - 50) });
+  assert.ok(Math.min(...binProfile(pts, 10).map((b) => b.v)) < 5);
+});
+
 test('binProfile: points without altitude are skipped', () => {
   const pts = climb.map((p, i) => (i % 2 ? { ...p, h: null } : p));
   assert.equal(binProfile(pts, 10).length, 10);

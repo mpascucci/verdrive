@@ -1,7 +1,7 @@
 // Run with: node --test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { tractivePower, fuelRate, perHundredKm, smooth, toCost, slopeFromAltitude, smoothSlope, co2FromFuel, treeDays, slopeLength, consumptionFromCo2, idleFromDisplacement, maxPowerFromRated, dragAreaFromBody, testMass, simulateCycle, calibrateK, altitudeStep, driveQuality, styleFactors, CALM_TAU, QUALITY_ECO, QUALITY_GOOD, REAL_WORLD_FACTOR, CDA_BY_BODY, CO2_PER_LITRE, TREE_KG_PER_YEAR } from './model.js';
+import { tractivePower, fuelRate, perHundredKm, smooth, toCost, slopeFromAltitude, smoothSlope, co2FromFuel, treeDays, slopeLength, consumptionFromCo2, idleFromDisplacement, maxPowerFromRated, dragAreaFromBody, testMass, simulateCycle, calibrateK, altitudeStep, styleLevel, styleFactors, styleMark, STYLE_ZERO_EXTRA, STYLE_MARK_MAX, CALM_TAU, REAL_WORLD_FACTOR, CDA_BY_BODY, CO2_PER_LITRE, TREE_KG_PER_YEAR } from './model.js';
 
 import { WLTC3B_KMH } from './wltc.js';
 
@@ -215,11 +215,11 @@ test('slopeFromAltitude: flat gives 0', () => {
 
 test('slopeFromAltitude: too short a distance gives null (noise, no answer yet)', () => {
   assert.equal(slopeFromAltitude({ dh: 3, dist: 10 }), null);
-  assert.equal(slopeFromAltitude({ dh: 3, dist: 31.9 }), null);
+  assert.equal(slopeFromAltitude({ dh: 3, dist: 49.9 }), null);
 });
 
 test('slopeFromAltitude: exactly minDist is accepted', () => {
-  assert.notEqual(slopeFromAltitude({ dh: 2, dist: 32 }), null);
+  assert.notEqual(slopeFromAltitude({ dh: 2, dist: 50 }), null);
 });
 
 test('slopeFromAltitude: zero, negative or NaN distance gives null', () => {
@@ -593,18 +593,20 @@ test('slopeFromAltitude: the distance is horizontal (GPS speed), so dh/dist is t
   assert.ok(Math.abs(Math.sin(theta) - 20 / Math.hypot(20, 100)) < 1e-12); // 0.196, not 0.20
 });
 
-// ---- driveQuality ----
-test('driveQuality: eco up to 1.10, good up to 1.25, brisk above; bad input gives null', () => {
-  assert.equal(driveQuality(0.97), 'eco');   // a calm stretch can use a little less than the shadow
-  assert.equal(driveQuality(1.05), 'eco');
-  assert.equal(driveQuality(QUALITY_ECO), 'eco');
-  assert.equal(driveQuality(1.16), 'good');
-  assert.equal(driveQuality(QUALITY_GOOD), 'good');
-  assert.equal(driveQuality(1.31), 'brisk');
-  for (const bad of [NaN, Infinity, 0, -1, null, undefined]) assert.equal(driveQuality(bad), null);
+// ---- styleLevel ----
+test('styleLevel: from the sum of the two marks, eco above 8, ok above 6, brisk above 4, bad at 4 or less', () => {
+  assert.equal(styleLevel(10), 'eco');
+  assert.equal(styleLevel(9), 'eco');
+  assert.equal(styleLevel(8), 'ok');
+  assert.equal(styleLevel(7), 'ok');
+  assert.equal(styleLevel(6), 'brisk');
+  assert.equal(styleLevel(5), 'brisk');
+  assert.equal(styleLevel(4), 'bad');
+  assert.equal(styleLevel(0), 'bad');
+  for (const bad of [NaN, Infinity, null, undefined]) assert.equal(styleLevel(bad), null);
 });
 
-test('driveQuality: against a calm shadow (speed smoothed with CALM_TAU), hard stop-and-go is brisk, gentle is good, steady is eco', () => {
+test('styleLevel: against a calm shadow (speed smoothed with CALM_TAU), hard stop-and-go is brisk, gentle is ok, steady is eco', () => {
   const car = { m: 1500, cdA: 0.65 };
   const fuel = (v, a) => fuelRate({ p: tractivePower({ v, a, ...car }), v, f0: 0.8, k: 0.45, pMax: 90000 });
   const drive = (speedAt) => {
@@ -629,9 +631,11 @@ test('driveQuality: against a calm shadow (speed smoothed with CALM_TAU), hard s
     };
   };
   assert.ok(Math.abs(drive(() => 25) - 1) < 1e-9);                         // steady 90 km/h: same as calm
-  assert.equal(driveQuality(drive(cycle(2.5, 3, 5))), 'brisk');            // hard accelerations and brakings
-  assert.equal(driveQuality(drive(cycle(0.8, 1, 10))), 'good');            // the same stops, taken gently
-  assert.equal(driveQuality(drive((t) => 14 + 3 * Math.sin(t / 30))), 'eco'); // slow swells over a minute
+  // no speed above any cap here: the speed mark is full (5/5), the accelerations mark decides
+  const level = (ratio) => styleLevel(styleMark(ratio) + STYLE_MARK_MAX);
+  assert.equal(level(drive(cycle(2.5, 3, 5))), 'brisk');             // hard accelerations and brakings (0/5)
+  assert.equal(level(drive(cycle(0.8, 1, 10))), 'ok');               // the same stops, taken gently (3/5)
+  assert.equal(level(drive((t) => 14 + 3 * Math.sin(t / 30))), 'eco'); // slow swells over a minute (5/5)
 });
 
 test('styleFactors: the two causes multiply to the total; an empty total gives null', () => {
@@ -653,4 +657,16 @@ test('styleFactors: driving above the cap costs fuel; below it the speed factor 
   const fast = at(130 / 3.6, 110 / 3.6);                          // steady 130 km/h against a 110 cap
   assert.ok(fast.speed > 1.15 && fast.speed < 1.35, String(fast.speed));
   assert.equal(fast.accel, 1);                                    // steady: no acceleration cost
+});
+
+test('styleMark: 5/5 at calm fuel or less, 0/5 at +50% or more, one mark per 10%', () => {
+  assert.equal(STYLE_MARK_MAX, 5);
+  assert.equal(styleMark(1), 5);
+  assert.equal(styleMark(0.95), 5);
+  assert.equal(styleMark(1.18), 3);   // +18% → 3.2 → 3
+  assert.equal(styleMark(1.30), 2);
+  assert.equal(styleMark(1 + STYLE_ZERO_EXTRA), 0);
+  assert.equal(styleMark(2), 0);
+  assert.equal(styleMark(NaN), null);
+  assert.equal(styleMark(0), null);
 });

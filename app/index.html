@@ -302,17 +302,16 @@
            dial's unit, a tap picks it (app.js) -->
       <div class="lights" role="group" aria-label="Dial unit" data-i18n-aria="trip.dialUnit">
         <div class="lights-col">
-          <button type="button" class="light" data-unit="h" aria-pressed="false" style="--light: var(--mid)">€/h</button>
           <button type="button" class="light" data-unit="km" aria-pressed="false" style="--light: var(--mid)">€/100 km</button>
+          <button type="button" class="light" data-unit="h" aria-pressed="false" style="--light: var(--mid)">€/h</button>
         </div>
         <div class="lights-col">
-          <button type="button" class="light" data-unit="co2" aria-pressed="false" style="--light: var(--low)">CO₂</button>
-          <button type="button" class="light" data-unit="speed" aria-pressed="false" style="--light: var(--scale-0)">km/h</button>
+          <button type="button" class="light" id="light-fuel" data-unit="fuel" aria-pressed="false" style="--light: var(--low)">L/100 km</button>
+          <button type="button" class="light" data-unit="co2" aria-pressed="false" style="--light: var(--scale-0)">CO₂</button>
         </div>
       </div>
       <!-- dial: centre at 0,0, arc radius 100 from −110° to +90° (0° = up), band above the max to +113°; app.js draws them -->
-      <!-- a tap on the dial switches its unit: €/h → €/100 km → kg CO₂/h (app.js) -->
-      <svg id="gauge" class="gauge" viewBox="-118 -124 236 190" role="button" tabindex="0" aria-label="Cost, tap to switch between €/h, €/100 km and kg CO₂/h" data-i18n-aria="trip.costAria">
+      <svg id="gauge" class="gauge" viewBox="-118 -124 236 190" role="img" aria-label="Cost dial; the lights above pick its unit" data-i18n-aria="trip.costAria">
         <g id="gauge-arc"></g>
         <!-- above the maximum: a 20° band, outline only; app.js draws it -->
         <path id="gauge-over" class="gauge-over"></path>
@@ -320,9 +319,9 @@
         <g id="gauge-scale"></g>
         <g id="avg-mark" class="dial-mark" hidden><polygon class="tri-avg" points="-4.9,-82.6 4.9,-82.6 0,-91"></polygon></g>
         <g id="recent-mark" class="dial-mark" hidden><polygon class="tri-recent" points="-4.9,-117.4 4.9,-117.4 0,-109"></polygon></g>
-        <!-- current cost, centred under the pivot; app.js puts the unit just after its right edge -->
+        <!-- current cost, centred under the pivot; its unit centred just above the pivot -->
         <g id="dial-value" class="reading" transform="translate(0 56)"></g>
-        <text id="dial-unit" class="reading-unit" x="24" y="56">€/h</text>
+        <text id="dial-unit" class="reading-unit" x="0" y="-24">€/h</text>
         <!-- the needle last, so it is drawn over the figure -->
         <g id="now-mark" class="dial-mark needle"><polygon points="-4.5,10 0,-98 4.5,10"></polygon><circle r="8"></circle></g>
       </svg>
@@ -331,7 +330,7 @@
 
     <section class="stats">
       <div class="stats-row">
-        <div class="stat"><div class="pair"><span id="speed">0</span><small>km/h</small></div></div>
+        <button type="button" id="speed-toggle" class="stat stat-toggle" aria-label="Speed, tap to show it on the dial" data-i18n-aria="trip.speedAria"><div class="pair"><span id="speed">0</span><small>km/h</small></div></button>
         <div class="stat"><div class="pair"><small class="sym">h:</small><span id="altitude">–</span><small>m</small></div></div>
         <div class="stat"><div class="pair"><span id="grade-value">–</span></div></div>
       </div>
@@ -372,9 +371,9 @@
     <div class="sum-main">
       <h1 data-i18n="sum.title">Trip summary</h1>
       <p id="summary-note" class="summary-note" hidden></p>
-      <!-- altitude along the road, coloured like the dial; drawn by drawProfile in app.js -->
-      <figure id="profile" class="profile" hidden>
-        <figcaption data-i18n="sum.profile">Altitude profile</figcaption>
+      <!-- altitude along the road, coloured like the dial; a tap switches to the speed; drawn by drawProfile in app.js -->
+      <figure id="profile" class="profile" hidden tabindex="0" role="button" aria-pressed="false" data-i18n-title="sum.profileTap" title="Tap to switch between altitude and speed">
+        <figcaption id="profile-caption" data-i18n="sum.profile">Altitude profile</figcaption>
         <svg id="profile-svg" viewBox="0 0 320 132" role="img" aria-label="Altitude profile"></svg>
       </figure>
     </div>

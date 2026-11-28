@@ -146,8 +146,8 @@ export function toCost({ litres, price }) {
  * @param {number} [p.maxGrade]  clamp on dh/dist (dimensionless; 0.25 = 25%)
  * @returns {number|null} θ in radians (positive uphill), or null when dist < minDist
  */
-// minDist 32 m since 2026-11-27 (was 50 m), on trial: replays showed the same accuracy and a jumpier reading in town.
-export function slopeFromAltitude({ dh, dist, minDist = 32, maxGrade = 0.25 }) {
+// minDist 50 m (back from the 32 m trial of 2026-11-27, on 2026-11-28: developer's decision).
+export function slopeFromAltitude({ dh, dist, minDist = 50, maxGrade = 0.25 }) {
   if (!(dist >= minDist)) return null; // also catches NaN and non-positive distances
   const ratio = Math.max(-maxGrade, Math.min(maxGrade, dh / dist));
   return Math.atan(ratio);
@@ -420,24 +420,20 @@ export function altitudeStep({ prevAlt, alt, step, maxGrade = 0.25, noise = 3 })
  * constant of CALM_TAU seconds (`smooth`), then capped at an efficient cruising speed for the vehicle type.
  * So it stops and starts where the real driver did, but accelerates and brakes gently and never drives
  * faster than the cap. Its fuel is computed with the same model, the same slopes and the same A/C load.
- * `ratio` is the real fuel per km divided by the calm fuel per km (see `styleFactors`).
+ * The extra fuel is split into accelerations and speed (`styleFactors`); each is marked out of 5 (`styleMark`),
+ * and the badge comes from the sum of the two marks, 0–10 (developer's thresholds, 2026-11-28):
  *
- * First thresholds, provisional (2026-11-27): car drives without speeding gave 1.05–1.16; two scooter rides
- * gave 1.27 (calmer) and 1.28 (brisker). To be recalibrated on rides the driver labels calm, normal or brisk.
+ *   sum > 8: 'eco';   > 6: 'ok';   > 4: 'brisk';   ≤ 4: 'bad'
  *
- *   ratio ≤ 1.10: 'eco';   ≤ 1.25: 'good';   above: 'brisk'
- *
- * @param {number} ratio  real fuel per km ÷ calm fuel per km
- * @returns {'eco'|'good'|'brisk'|null} null when the ratio is not a usable number
+ * @param {number} sum  accelerations mark + speed mark
+ * @returns {'eco'|'ok'|'brisk'|'bad'|null} null when the sum is not a usable number
  */
 export const CALM_TAU = 5;            // s: smoothing of the calm driver's speed
-export const QUALITY_ECO = 1.10;      // ratio up to which the drive is 'eco'
-export const QUALITY_GOOD = 1.25;     // ratio up to which the drive is 'good'; above it, 'brisk'
-export function driveQuality(ratio) {
-  if (!Number.isFinite(ratio) || ratio <= 0) return null;
-  if (ratio <= QUALITY_ECO) return 'eco';
-  if (ratio <= QUALITY_GOOD) return 'good';
-  return 'brisk';
+export const STYLE_LEVELS = [[8, 'eco'], [6, 'ok'], [4, 'brisk']]; // [sum above which, level]; else 'bad'
+export function styleLevel(sum) {
+  if (!Number.isFinite(sum)) return null;
+  for (const [above, level] of STYLE_LEVELS) if (sum > above) return level;
+  return 'bad';
 }
 
 /**
@@ -454,4 +450,18 @@ export function styleFactors({ real, smooth, calm }) {
   const r = perM(real), s = perM(smooth), c = perM(calm);
   if (![r, s, c].every(Number.isFinite)) return null;
   return { total: r / c, accel: r / s, speed: s / c };
+}
+
+/**
+ * A style factor (from `styleFactors`) as a mark out of STYLE_MARK_MAX (5): 5 at the calm driver's fuel (factor 1,
+ * or less), 0 at +STYLE_ZERO_EXTRA (50%) more fuel or worse, linear in between (one mark per 10%), rounded.
+ * @param {number} factor  fuel per km ÷ the shadow's fuel per km
+ * @returns {number|null}  0–5, or null when the factor is not a usable number
+ */
+export const STYLE_ZERO_EXTRA = 0.5;
+export const STYLE_MARK_MAX = 5;
+export function styleMark(factor) {
+  if (!Number.isFinite(factor) || factor <= 0) return null;
+  const extra = Math.max(0, factor - 1);
+  return Math.max(0, Math.round(STYLE_MARK_MAX * (1 - extra / STYLE_ZERO_EXTRA)));
 }

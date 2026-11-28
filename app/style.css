@@ -267,9 +267,7 @@ dialog button { width: 100%; margin-top: 0.6rem; }
 .legend-tri { display: inline-block; vertical-align: 0.05em; height: auto; width: calc(min(100% + 1rem, 560px) * 12 / 236); overflow: visible; }
 .avg-line span { color: var(--bone); font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 /* the dial reaches into the screen's side padding to be as big as the phone allows; .scale centres it */
-.gauge { display: block; width: calc(100% + 1rem); max-width: 560px; flex: none; overflow: visible; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-.gauge:focus { outline: none; }
-.gauge:focus-visible { outline: 3px solid var(--mid); outline-offset: 2px; border-radius: 6px; }
+.gauge { display: block; width: calc(100% + 1rem); max-width: 560px; flex: none; overflow: visible; }
 /* shading: green up to 20% of the sweep (0.4× cruise), amber at the top (cruise), coral from 80% (1.6× cruise); colours set in app.js */
 #gauge-arc path { fill: none; stroke-width: 14; }
 /* beyond the maximum: transparent band with a red outline */
@@ -289,7 +287,7 @@ dialog button { width: 100%; margin-top: 0.6rem; }
 /* the current €/h as seven-segment digits (segments.js); unlit segments show faintly, as on a real display */
 #dial-value { fill: var(--cost-color, var(--bone)); transition: fill 0.4s; }
 #dial-value .off { opacity: 0.08; }
-.gauge .reading-unit { font-size: 13px; text-anchor: start; fill: var(--dim-hi); }
+.gauge .reading-unit { font-size: 13px; text-anchor: middle; fill: var(--dim-hi); }
 .trip[data-held="true"] #dial-value { fill: var(--dim); }
 @media (prefers-reduced-motion: reduce) { .dial-mark { transition: none; } }
 
@@ -353,15 +351,22 @@ dialog button { width: 100%; margin-top: 0.6rem; }
 }
 
 /* ---------- summary ---------- */
-.summary-note { margin: -0.4rem 0 0.4rem; color: var(--dim); font-size: 0.72rem; }
+.summary-note { margin: -0.4rem 0 0.4rem; color: var(--dim); font-size: 0.72rem; white-space: pre-line; } /* the replay note breaks after the file name */
 .profile { margin: 0 0 0.75rem; padding: 0.75rem 0.75rem 0.5rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .profile figcaption { color: var(--dim); font-size: 0.75rem; margin-bottom: 0.2rem; }
 .profile svg { display: block; width: 100%; height: auto; overflow: visible; }
 .profile .area { fill: var(--line); opacity: 0.6; }
 .profile .seg { fill: none; stroke-width: 3; stroke-linecap: round; }
+.profile .seg.thin { stroke-width: 1.2; } /* the speed line */
+.profile { cursor: pointer; }
+.profile.no-speed { cursor: auto; }
+.profile:focus-visible { outline: 3px solid var(--mid); outline-offset: 2px; }
+.profile:not(.show-speed) .speed-layer, .profile.show-speed .alt-axis { display: none; } /* a tap switches the plot (app.js) */
+.profile.show-speed .alt-plot { opacity: 0.3; } /* the altitude, darker, under the speed line */
 .profile .guide { stroke: var(--dim); stroke-width: 0.75; stroke-dasharray: 3 3; }
 .profile .ext { fill: var(--bone); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .profile .axis { fill: var(--dim); font-size: 10px; }
+.profile .speed-ext { font-size: 10px; }
 .summary .tappable { cursor: pointer; }
 .summary .tappable:focus-visible { outline: 3px solid var(--mid); outline-offset: 2px; }
 .tree-detail { margin: 1rem 0; padding: 0.9rem 1rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--dim); line-height: 1.45; }
@@ -374,15 +379,19 @@ dialog button { width: 100%; margin-top: 0.6rem; }
 .summary .style dd { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.6rem; }
 .summary .style small { font-size: 0.75rem; font-weight: 400; letter-spacing: 0; }
 .summary .style[data-level="eco"] dd { color: var(--low); }        /* green */
-.summary .style[data-level="good"] dd { color: var(--scale-75); }  /* yellow, as on the dial */
-.summary .style[data-level="brisk"] dd { color: var(--high); }     /* red */
+.summary .style[data-level="ok"] dd { color: var(--scale-75); }    /* yellow, as on the dial */
+.summary .style[data-level="brisk"] dd { color: color-mix(in oklab, var(--scale-100) 50%, var(--scale-75)); } /* orange */
+.summary .style[data-level="bad"] dd { color: var(--high); }       /* red */
 .summary .style small { color: var(--dim); }
+.summary .style .mark { font-weight: 700; } /* colour from markColor (app.js) */
 /* portrait: label and figure on one line, to keep the page short; the driving style (badge and note) and the
    tree card (long label) stay stacked. Landscape cards are too narrow for this and stay stacked (below). */
 .summary div:not(.style):not(.tree) { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; padding-top: 0.45rem; padding-bottom: 0.45rem; }
 .summary div:not(.style):not(.tree) dt { font-size: 0.72rem; white-space: nowrap; }
 .summary div:not(.style):not(.tree) dd { margin: 0; white-space: nowrap; }
 .summary .tree { display: flex; flex-direction: column; justify-content: center; } /* centred beside a one-line card */
+.summary .total dd { color: var(--scale-75); } /* the trip's cost, in the dial's yellow */
+.summary .tree dd { order: -1; } /* the time above its label (the list keeps dt before dd) */
 /* portrait: the wrappers are invisible, so the summary is one column as before */
 .sum-main, .sum-side, .sum-actions { display: contents; }
 

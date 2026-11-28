@@ -202,7 +202,7 @@ This is the road-sign grade (a 20% sign means $\tan\theta = 0.20$). The slope fo
 
 **The problem: GPS altitude is noisy.** The satellites are all above the phone, so the vertical position is poorly constrained, and the altitude error is typically 2–3 times the horizontal one: several metres. A 3 m error over 10 m of road would read as a 30% slope. So the slope is built in four stages:
 
-1. **Minimum distance (32 m).** A new slope is computed only after at least 32 m of road. A 3 m error then gives at most 9%, which the next stages reduce further.
+1. **Minimum distance (50 m).** A new slope is computed only after at least 50 m of road. A 3 m error then gives at most 6%, which the next stages reduce further.
 2. **Clamp at ±25%.** Steeper roads are extremely rare (motorways stay under 8%, mountain roads reach 15–20%). Anything above is a glitch.
 3. **Smoothing over distance.** Successive raw slopes are averaged with an exponential filter whose length is set in metres of road, not seconds (Appendix A explains the filter). A slope belongs to a place on the road, not to a moment. The length is about four GPS readings' worth of road, bounded between 32 m in town (so short hills are not flattened) and 150 m on the motorway (where more noise needs averaging). The price is a lag: the displayed slope trails the real one by a few seconds.
 4. **Believability check.** Between two readings, the altitude cannot change by more than 25% of the distance driven plus a few metres of noise. A larger change is the GPS correcting itself, not the road. After such a jump, or when the GPS has just started, the altitude is not trusted until it moves by a believable amount while driving. While it is not trusted, the app treats the road as flat and shows "–" for the slope.
@@ -351,17 +351,22 @@ $$
 \underbrace{\frac{\text{real}}{\text{calm}}}_{r} \;=\; \underbrace{\frac{\text{real}}{\text{smoothed}}}_{\text{accelerations}} \;\times\; \underbrace{\frac{\text{smoothed}}{\text{calm}}}_{\text{speed}}
 $$
 
-**The badge.** It is set by the total $r$:
+**The marks.** Each part gets a mark out of 5. It scores 5/5 when it costs no more fuel than the calm driver, and loses one point for every 10% of extra fuel, down to 0/5 at +50%:
 
-| $r$ | Driving style |
+$$\text{mark} = \operatorname{round}\Big(5\,\big(1 - \tfrac{\max(0,\ \text{factor} - 1)}{0.5}\big)\Big), \quad \text{at least } 0.$$
+
+**The badge.** It is set by the sum of the two marks, from 0 to 10:
+
+| Sum of the marks | Driving style |
 | --- | --- |
-| up to 1.10 | Eco |
-| 1.10 to 1.25 | Good |
-| above 1.25 | Brisk |
+| 9 or 10 | Eco |
+| 7 or 8 | OK |
+| 5 or 6 | Brisk |
+| 4 or less | Bad |
 
-The summary shows the badge and the two parts, for example "Good: accelerations +7%, speed +3%", so the driver knows what to change. Trips shorter than 1 km get no badge.
+The summary shows the badge and both marks, for example "OK: accelerations 3/5 · speed 5/5", so the driver knows what to change. Trips shorter than 1 km get no badge.
 
-**The thresholds are provisional.** Motorway drives came out at 1.08–1.11, town and hill drives at 1.13–1.16. They will be recalibrated on drives that their drivers label calm, normal or brisk, possibly with separate thresholds for two-wheelers.
+**The thresholds are provisional.** They will be checked on drives that their drivers label calm, normal or brisk, possibly with separate settings for two-wheelers.
 
 **Limits.**
 - Without a map the app does not know the speed limit: the cap is an efficient speed, not the legal one, so a legal 130 km/h on the motorway still shows a speed cost.

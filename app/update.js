@@ -8,6 +8,7 @@
 // buildId is pure and tested in update.test.js.
 
 // The files that make up the app. A change in any of them is a new version.
+// A new app file goes here and in PRECACHE (sw.js): files.test.js fails until it does.
 const WATCHED = ['index.html', 'style.css', 'app.js', 'model.js', 'gps.js', 'triplog.js', 'update.js', 'profile.js', 'wltc.js', 'vehicles.js', 'elevation.js', 'i18n.js', 'segments.js', 'footer.js', 'CREDITS.md'];
 const CHECK_EVERY = 30 * 60 * 1000; // ms
 
